@@ -4,12 +4,11 @@ Run from the project root:
     uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 """
 
-from pathlib import Path
-
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from backend.config import settings
 from backend.schemas import AnalysisResponse, HealthResponse
 from backend.services import analysis_service
 
@@ -17,16 +16,13 @@ app = FastAPI(title="Nuclei MVP API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=settings.allowed_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-RESULT_DIR = Path(__file__).resolve().parent / "storage" / "results"
+RESULT_DIR = settings.result_dir
 
 
 @app.get("/api/health", response_model=HealthResponse)

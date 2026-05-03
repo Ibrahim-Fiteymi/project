@@ -24,19 +24,20 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
+from backend.config import settings  # noqa: E402
 from src.infer import make_overlay  # noqa: E402
 from src.batch_count_refined import count_nuclei_from_binary  # noqa: E402
 
-CHECKPOINT_PATH = ROOT / "outputs" / "checkpoints" / "best_model.pth"
-UPLOAD_DIR = ROOT / "backend" / "storage" / "uploads"
-RESULT_DIR = ROOT / "backend" / "storage" / "results"
+CHECKPOINT_PATH = settings.checkpoint_path
+UPLOAD_DIR = settings.upload_dir
+RESULT_DIR = settings.result_dir
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
-IMAGE_SIZE = 256
-THRESHOLD = 0.8       # corrected operating point from batch_count_refined.py
-MIN_AREA = 1
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+IMAGE_SIZE = settings.image_size
+THRESHOLD = settings.threshold
+MIN_AREA = settings.min_area
+MAX_UPLOAD_BYTES = settings.max_upload_bytes
 
 # Lazy singletons populated on first use
 _model = None

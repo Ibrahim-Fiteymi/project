@@ -1,0 +1,33 @@
+# Local development infrastructure for Deeply Analytics.
+#
+# Phase 1 step 1: Postgres only. Redis (for Celery) is added in Phase 2 step 14.
+#
+# Usage:
+#   docker compose up -d        # start postgres in the background
+#   docker compose ps           # verify it is healthy
+#   docker compose logs -f      # tail logs
+#   docker compose down         # stop containers (keeps the data volume)
+#   docker compose down -v      # stop and DELETE the data volume
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: deeply-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-deeply}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-deeply}
+      POSTGRES_DB: ${POSTGRES_DB:-deeply}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-deeply} -d ${POSTGRES_DB:-deeply}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+    name: deeply_postgres_data

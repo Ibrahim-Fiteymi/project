@@ -2,7 +2,24 @@
 
 > **Document type.** Architecture and implementation specification for *Deeply Analytics*, a web-first AI microscopy analysis platform built on top of the existing nuclei segmentation and counting pipeline.
 > **Status legend.** **[Implemented]** = verified in the repository today · **[Partial]** = exists in skeletal or single-instance form · **[Proposed]** = part of the target architecture, not yet built.
-> **Document version.** v0.1 — 2026-05-02.
+> **Document version.** v0.3 — 2026-05-02 (second-pass tightening: storage layout migration, deprecated `/api/analyze` alias, fallback-demo mode surfaced in C.5, rate-limit numbers aligned with the Animation Guide, `VITE_API_URL` surfaced in Phase 1).
+> **Companion documents.**
+> - For integration walkthroughs (click-to-result trace, layer boundary contracts) and animation recipes with copy-paste Framer Motion code, see [`DEEPLY_ANALYTICS_ANIMATION_AND_INTEGRATION_GUIDE.md`](DEEPLY_ANALYTICS_ANIMATION_AND_INTEGRATION_GUIDE.md).
+> - For the file-by-file mapping from the current MVP to this target architecture, see [`MVP_TO_DEEPLY_ROADMAP.md`](MVP_TO_DEEPLY_ROADMAP.md).
+>
+> ---
+>
+> ### Locked-in technical decisions (2026-05-02)
+>
+> | Decision | Choice | Notes |
+> |---|---|---|
+> | **ORM** | **SQLModel** | One model class doubles as Pydantic schema; Alembic for migrations |
+> | **JWT storage (frontend)** | **HTTP-only cookie** preferred; **`localStorage`** as the MVP fallback | Cookie path requires `allow_credentials=True` in CORS (see Section P.3) |
+> | **Phase 1 background runner** | **FastAPI `BackgroundTasks`** | In-process, no infra; ships with FastAPI |
+> | **Phase 2 production worker** | **Celery + Redis** | Two queues: `inference` (heavy), `default` (light) |
+> | **Storage** | **Local filesystem in dev**, **S3-compatible in production** | Same `ObjectStorage` interface for both; DB stores keys, not bytes |
+>
+> These choices are reflected throughout this document and are no longer open questions.
 
 ---
 
@@ -72,16 +89,17 @@ Deeply Analytics is built on a **layered architecture**. Each layer has one resp
 ### C.4 Data access layer
 
 - **Responsibilities.** Translate domain operations into database queries. Hide SQL behind repositories. Manage transactions.
-- **Main modules.** `db/session.py` (engine + session factory), `db/models/` (SQLModel/SQLAlchemy classes), `db/repositories/` (one per aggregate: `users`, `projects`, `analyses`, `results`, `exports`).
+- **Main modules.** `db/session.py` (engine + session factory), `db/models/` (SQLModel classes), `db/repositories/` (one per aggregate: `users`, `projects`, `analyses`, `results`, `exports`).
 - **Connection.** Called only by services. Owns Alembic migrations under `db/migrations/`.
 - **Status.** **[Proposed]** — no database, no ORM, no migrations exist today.
 
 ### C.5 AI inference layer
 
 - **Responsibilities.** Pure model logic. Load the U-Net checkpoint, run preprocessing → inference → postprocessing, expose deterministic Python functions to the service layer. No HTTP, no DB, no auth.
-- **Main modules.** `src/infer.py` (`make_overlay`, model loading), `src/batch_count_refined.py` (`count_nuclei_from_binary`), `src/extract_morphology.py`, `src/generate_density_maps.py`, plus the proposed `preprocess.py`, `postprocess.py` extraction (Section J).
-- **Connection.** Imported by `services/analysis_service.py` (already wired). Reads the checkpoint at `outputs/checkpoints/best_model.pth`.
+- **Main modules.** `src/infer.py` (`make_overlay`, model loading), `src/batch_count_refined.py` (`count_nuclei_from_binary`), `src/extract_morphology.py`, `src/generate_density_maps.py`. The backend wraps these via thin re-export modules under `backend/ai/` (`preprocess.py`, `postprocess.py`, etc., per Section F.1) — `src/` itself is **not restructured** (see `MVP_TO_DEEPLY_ROADMAP.md` §4).
+- **Connection.** Imported by `services/analysis_service.py` (already wired). Reads the checkpoint at `outputs/checkpoints/best_model.pth`. Dependency direction: `backend → src`, never the reverse.
 - **Status.** **[Implemented]** — the U-Net pipeline, the trained checkpoint, the counter, the morphology extractor, and the density-map generator all exist and are verified.
+- **Fallback path.** The current MVP service includes a **fallback-demo mode** (Otsu threshold + morphological opening) that activates only when the U-Net checkpoint cannot be loaded. The HTTP response field `metadata.mode` reports either `"model"` or `"fallback-demo"`, and the frontend displays a corresponding badge. The fallback never overwrites the AI code in `src/`; it lives entirely in `backend/services/analysis_service.py`. This is **[Implemented]** today and is preserved in the target architecture as a deployment-resilience feature.
 
 ---
 
@@ -92,11 +110,11 @@ The end-to-end path of one analysis from browser to backend to AI and back:
 | # | Step | What happens | Status |
 |---|---|---|---|
 | 1 | **User opens frontend** | Vite-served React app loads at `https://deeply-analytics.app`. Public routes (Login) render; protected routes redirect if no JWT. | [Partial] — app loads at `http://127.0.0.1:5173/` today; routing is single-page. |
-| 2 | **User logs in** | `POST /auth/login` returns a JWT; frontend stores it in memory + httpOnly cookie. | [Proposed] |
-| 3 | **User uploads image** | Frontend sends `multipart/form-data` to `POST /analyses/upload`. The image is stored under `storage/uploads/{job_id}.{ext}`. | [Partial] — `POST /api/analyze` already accepts uploads and saves to `backend/storage/uploads/`. The session-bound `/analyses/upload` endpoint is [Proposed]. |
+| 2 | **User logs in** | `POST /auth/login` sets the JWT in an **HTTP-only, `Secure`, `SameSite=Lax` cookie** (production) or returns it in the JSON body for `localStorage` (MVP fallback). The choice is per environment, not per user. | [Proposed] |
+| 3 | **User uploads image** | Frontend sends `multipart/form-data` to `POST /analyses/upload`. The image is stored under `storage/uploads/{job_id}.{ext}`. | [Partial] — `POST /api/analyze` already accepts uploads and saves to `backend/storage/uploads/`. The session-bound `/analyses/upload` endpoint is [Proposed]; `/api/analyze` is kept as a **deprecated alias for one release** (see `MVP_TO_DEEPLY_ROADMAP.md` §7 step 7). |
 | 4 | **Backend stores image and creates analysis job** | A new `analysis_jobs` row is inserted with status `pending`. Service returns `job_id` immediately. | [Proposed] — current MVP runs synchronously. |
-| 5 | **Background task executes inference** | A worker (FastAPI BackgroundTasks for MVP, Celery/RQ in production) loads the model, runs preprocessing → inference → postprocessing → counting → morphology → density, writes artefacts to object storage, persists `analysis_results` and `morphology_records`, marks the job `completed`. | [Partial] — synchronous version of this pipeline runs today inside the request. Asynchronous job handling is [Proposed]. |
-| 6 | **Results are stored** | Structured numeric results in PostgreSQL (`analysis_results`, `morphology_records`). Binary artefacts (mask, overlay, density heatmap) in object storage. | [Partial] — files written to `backend/storage/results/` today; DB persistence is [Proposed]. |
+| 5 | **Background task executes inference** | A worker (FastAPI `BackgroundTasks` in Phase 1, Celery + Redis in Phase 2) loads the model, runs preprocessing → inference → postprocessing → counting → morphology → density, writes artefacts to object storage, persists `analysis_results` and `morphology_records`, marks the job `completed`. | [Partial] — synchronous version of this pipeline runs today inside the request. `BackgroundTasks` wiring is Phase 1; Celery is Phase 2. |
+| 6 | **Results are stored** | Structured numeric results in PostgreSQL (`analysis_results`, `morphology_records`). Binary artefacts (mask, overlay, density heatmap) in object storage under `storage/results/{job_id}/{kind}.png` (per-job folder). | [Partial] — files written today to `backend/storage/results/{job_id}_{kind}.png` (flat layout); migration to the per-job folder layout is Phase 1 task 6 (see `MVP_TO_DEEPLY_ROADMAP.md` §5). DB persistence is [Proposed]. |
 | 7 | **Frontend polls/fetches status** | Result page calls `GET /analyses/{id}/status` until status is `completed` or `failed`. | [Proposed] |
 | 8 | **Result page renders analytics** | The page calls `GET /results/{id}`, `GET /results/{id}/morphology`, `GET /results/{id}/density`, and renders three image cards, a count tile, a morphology table, and a density heatmap. | [Partial] — single-call rendering exists today; the multi-endpoint result composition is [Proposed]. |
 | 9 | **History and reports reuse saved data** | History page lists past jobs; reports/export page generates CSV / PNG / PDF on demand from stored data. | [Proposed] |
@@ -260,7 +278,7 @@ backend/
 │   └── density.py
 ├── workers/
 │   ├── tasks.py                  # job entry point
-│   └── runner.py                 # Celery/RQ bootstrap (or BackgroundTasks)
+│   └── runner.py                 # BackgroundTasks adapter (Phase 1) → Celery app (Phase 2)
 └── storage/
     ├── uploads/
     └── results/
@@ -429,9 +447,9 @@ The AI layer is intentionally separate from API and UI. It is pure Python with n
 
 | Module | Responsibility | Input | Output | Connection |
 |---|---|---|---|---|
-| **preprocess.py** | Decode bytes → RGB uint8 → resize to model input → normalise to `[0,1]` → tensor | `bytes` (image), `target_size: int` | `np.ndarray` (RGB uint8 256×256), `torch.Tensor` (1×3×256×256) | First step in the pipeline; called by the service before inference. **[Partial]** — equivalent logic exists inline in `src/infer.py:load_image` and `backend/services/analysis_service.py:_decode_image`. |
-| **infer.py** | Load the U-Net checkpoint (lazy singleton), run forward pass, return raw logits or sigmoid probabilities | `torch.Tensor` (1×3×H×W) | `np.ndarray` (H×W float32 in `[0,1]`) | Second step. **[Implemented]** — `src/infer.py` loads `best_model.pth` and runs the model. |
-| **postprocess.py** | Threshold the probability map, clean small artefacts | `np.ndarray` (probabilities), `threshold: float`, `min_area: int` | `np.ndarray` (binary uint8 mask, 0 or 255) | Third step. **[Partial]** — thresholding done inline in `src/infer.py` and the service. Should be extracted into its own module. |
+| **preprocess.py** | Decode bytes → RGB uint8 → resize to model input → normalise to `[0,1]` → tensor | `bytes` (image), `target_size: int` | `np.ndarray` (RGB uint8 256×256), `torch.Tensor` (1×3×256×256) | First step in the pipeline; called by the service before inference. **[Partial]** — equivalent logic exists in `src/infer.py:load_image` and `backend/services/analysis_service.py:_decode_image`; `backend/ai/preprocess.py` will re-export it as a single named function. |
+| **infer.py** | Load the U-Net checkpoint (lazy singleton), run forward pass, return raw logits or sigmoid probabilities | `torch.Tensor` (1×3×H×W) | `np.ndarray` (H×W float32 in `[0,1]`) | Second step. **[Implemented]** — `src/infer.py` loads `best_model.pth` and runs the model; `backend/ai/infer.py` will be a thin re-export. |
+| **postprocess.py** | Threshold the probability map, clean small artefacts | `np.ndarray` (probabilities), `threshold: float`, `min_area: int` | `np.ndarray` (binary uint8 mask, 0 or 255) | Third step. **[Partial]** — thresholding currently lives inline in `src/infer.py` and the service; `backend/ai/postprocess.py` will expose it as a single function. `src/` itself is not restructured (see `MVP_TO_DEEPLY_ROADMAP.md` §4). |
 | **count.py** | Connected-component counting | binary mask, `min_area` | `int` (cell count) | Fourth step. **[Implemented]** — `count_nuclei_from_binary` in `src/batch_count_refined.py`. |
 | **morphology.py** | Per-nucleus features (area, perimeter, circularity, eccentricity, centroid) | binary mask | list of feature dicts + summary | Fifth step. **[Implemented]** — `src/extract_morphology.py`. |
 | **density.py** | Grid-based density heatmap | binary mask, image shape, grid size | `np.ndarray` (heatmap) + PNG | Sixth step. **[Implemented]** — `src/generate_density_maps.py`. |
@@ -470,11 +488,11 @@ pending  ───►  processing  ───►  completed
 
 ### K.2 Implementation options
 
-| Option | When to use | Pros | Cons |
-|---|---|---|---|
-| **FastAPI `BackgroundTasks`** | MVP, single-process deployment, low concurrency | Zero infra, ships with FastAPI, easy to wire in a service | In-process; killed if the API restarts; no retries; no cross-process queue |
-| **Celery + Redis broker** | Production with multiple workers, retries, scheduled tasks | Mature, observable (Flower, Prometheus exporters), retries and rate limits built-in | More moving parts; requires Redis or RabbitMQ |
-| **RQ (Redis Queue)** | Smaller production deployments | Simpler than Celery, Python-native | Less feature-rich; fewer integrations |
+| Option | When to use | Pros | Cons | Decision |
+|---|---|---|---|---|
+| **FastAPI `BackgroundTasks`** | MVP, single-process deployment, low concurrency | Zero infra, ships with FastAPI, easy to wire in a service | In-process; killed if the API restarts; no retries; no cross-process queue | ✅ **Phase 1** |
+| **Celery + Redis broker** | Production with multiple workers, retries, scheduled tasks | Mature, observable (Flower, Prometheus exporters), retries and rate limits built-in | More moving parts; requires Redis | ✅ **Phase 2 (production)** |
+| **RQ (Redis Queue)** | Smaller production deployments | Simpler than Celery, Python-native | Less feature-rich; fewer integrations | ❌ Not chosen |
 
 ### K.3 Why background jobs matter for AI
 
@@ -657,7 +675,7 @@ export function Modal({ open, onClose, children }: ModalProps) {
 | `--error` | `#dc2626` | Status: failed |
 | `--border` | `#e2e8f0` | Card and input borders |
 
-The current MVP uses a darker design language tied to the "3D-inspired" report; the production palette above is the recommended **default** for the SaaS dashboard. Both can coexist: light theme for the application, deep theme for marketing surfaces.
+The current MVP uses a darker design language tied to the "3D-inspired" report. The light palette above is the **production default** for the SaaS dashboard and is the target the MVP tokens will migrate to during Phase 2 step 12 (Animation polish). The deeper palette is retained for marketing surfaces and demo screenshots only.
 
 ### M.2 Typography
 
@@ -718,9 +736,9 @@ For the current scope (one user, a few pages, low data volume), keep state where
 
 This is the pattern already used in the MVP frontend (`frontend/src/api.ts`, local component state). It is sufficient for **[Implemented]** today.
 
-### N.2 Stronger — TanStack Query (React Query)
+### N.2 Stronger — TanStack Query
 
-Once the app grows beyond a handful of pages, switch to **TanStack Query** for server state.
+Once the app grows beyond a handful of pages, switch to **TanStack Query** (formerly React Query) for server state.
 
 | Reason | Benefit |
 |---|---|
@@ -730,7 +748,7 @@ Once the app grows beyond a handful of pages, switch to **TanStack Query** for s
 | **Mutations + invalidation** | After a `POST /analyses/upload`, invalidate the history query so the new job appears |
 | **Devtools** | Inspect cache, request timing, and stale state visually |
 
-Keep client-only state (modal open/close, form values) in React state. Server data goes through React Query.
+Keep client-only state (modal open/close, form values) in React state. Server data goes through TanStack Query.
 
 **Status:** **[Proposed]** — not currently a dependency.
 
@@ -749,7 +767,7 @@ Keep client-only state (modal open/close, form values) in React state. Server da
 | **Export tests** | CSV export schema is correct; PNG export returns the heatmap; PDF export bundles all artefacts; export rejected if job not completed |
 | **Permission tests** | Cross-user access patterns return `403` not `404`; admin overrides; rate limiter trips at the configured threshold |
 
-Run via `pytest backend/tests -q`. Use `httpx.AsyncClient` against the FastAPI app and an in-memory or test-database fixture.
+Run via `pytest backend/tests -q`. Use `httpx.AsyncClient` against the FastAPI app with `app.dependency_overrides` swapping in a test session. Use a **dedicated PostgreSQL test database** (matching production engine) with a transactional fixture per test that rolls back on teardown — this is faster than truncating tables and impossible to leak between tests. SQLite is not used, even for unit tests, because SQLModel field types and JSONB columns must round-trip on the same engine the production code uses.
 
 ### O.2 Frontend — Playwright
 
@@ -815,7 +833,7 @@ allow_origins=[
 ]
 ```
 
-No wildcard. No `allow_credentials=True` unless cookie-based auth is used.
+No wildcard. Because production uses HTTP-only cookies for the JWT (see locked-in decisions at the top of this document), production CORS **must** set `allow_credentials=True` and the frontend `fetch` must use `credentials: "include"`. The MVP `localStorage` fallback does not need credentials and may keep `allow_credentials=False` until cookies are wired.
 
 ### P.4 `VITE_API_URL`
 
@@ -834,12 +852,12 @@ Frontend and backend deploy independently. A backend hotfix does not require a f
 | Requirement | Detail | Status |
 |---|---|---|
 | **JWT auth** | HS256 or RS256 tokens; 60-minute access token + refresh token; signed with `JWT_SECRET` from env | [Proposed] |
-| **Password hashing** | `argon2id` (or `bcrypt` with cost ≥ 12); never store plaintext | [Proposed] |
+| **Password hashing** | `argon2id` (via `argon2-cffi`); never store plaintext | [Proposed] |
 | **Protected frontend routes** | A `<RequireAuth>` wrapper redirects to `/login` when the JWT is missing or expired | [Proposed] |
 | **Backend authorisation checks** | Services check `current_user` against resource ownership on every read/write; never trust the URL alone | [Proposed] |
 | **Role-based access control** | Roles `user` and `admin`; admin endpoints behind a `require_role("admin")` dependency | [Proposed] |
 | **Upload validation** | Content-type check, magic-byte sniffing on top of the extension, max size enforced by middleware | [Partial] — content-type and size limits exist in the MVP analysis service |
-| **Rate limiting** | Per-user and per-IP buckets on `/auth/login`, `/analyses/upload`, `/reports/*`; e.g. 30 r/m per user | [Proposed] |
+| **Rate limiting** | `slowapi` per-user and per-IP buckets — `/auth/login` 10/min/IP, `/analyses/upload` 30/min/user, `/reports/*` 60/min/user (matches `Settings.rate_limit_*` in the Animation Guide §1.5) | [Proposed] |
 | **Secure environment variables** | All secrets read from env; never committed; rotated via the host's secret manager | [Proposed] |
 | **No hardcoded secrets** | CI lint step rejects committed `.env` files and known-secret patterns | [Proposed] |
 | **CORS allowlist** | Exact-origin allowlist; no `*`; no credentials unless explicitly required | [Implemented] — current MVP uses an exact allowlist |
@@ -851,29 +869,38 @@ Frontend and backend deploy independently. A backend hotfix does not require a f
 
 The roadmap is split into two phases. Phase 1 brings the platform to a **persistent, multi-user MVP**. Phase 2 closes the gap to a production product.
 
-### R.1 Phase 1 — Platform foundation
+### R.1 Phase 1 — Persistent multi-user MVP
+
+The exit criterion for Phase 1 is: *a logged-in user can upload an image, see the job complete, and view a basic result page that reads from the database*. Inference runs via FastAPI `BackgroundTasks` (in-process); Celery is a Phase 2 swap. Storage is the local filesystem; S3 is a Phase 2 swap.
 
 | # | Task | Deliverable | Depends on |
 |---|---|---|---|
-| 1 | Project setup | `backend/`, `frontend/`, `docker-compose.yml` for Postgres, env loading | — |
-| 2 | DB models | SQLModel classes for `users`, `projects`, `analysis_jobs`; first Alembic migration | 1 |
-| 3 | Auth | `/auth/register`, `/auth/login`, `/auth/me`; password hashing; JWT issuance and verification | 2 |
-| 4 | Upload endpoint | `POST /analyses/upload` validated, persists to `storage/uploads/`, creates a `pending` job | 2, 3 |
-| 5 | Analysis job table & status endpoint | `analysis_jobs` row with status; `GET /analyses/{id}/status` | 2, 4 |
-| 6 | Simple dashboard UI | App shell (sidebar + header + outlet); protected routes; Dashboard page with last-N jobs; New Analysis page | 3, 4 |
-| 7 | History list | History page with paginated table + basic filters | 5 |
+| 1 | Project setup | `backend/config.py` (`pydantic-settings`), `docker-compose.yml` for Postgres, `.env` loading | — |
+| 2 | DB models | SQLModel classes for `users`, `projects`, `analysis_jobs`, `analysis_results`; first Alembic migration | 1 |
+| 3 | Auth | `/auth/register`, `/auth/login`, `/auth/me`; argon2id password hashing; JWT issuance and verification; `current_user` dependency | 2 |
+| 4 | Project CRUD | `GET/POST /projects`, `GET /projects/{id}`; owner-only access | 2, 3 |
+| 5 | Upload endpoint + job creation | `POST /analyses/upload` validated, persists upload to local FS, inserts `analysis_jobs` row with `status="pending"`, returns `202 Accepted` with `job_id` | 2, 3, 4 |
+| 6 | Background-task inference | `BackgroundTasks.add_task(process_job, job_id)` runs the existing pipeline (preprocess → infer → postprocess → count → morphology → density), writes artefacts to `storage/results/{job_id}/`, inserts the `analysis_results` row, transitions job `pending → processing → completed | failed` | 5 |
+| 7 | Status + result endpoints | `GET /analyses/{id}/status` (polling) and `GET /analyses/{id}` (full record after completion) with owner authorisation | 6 |
+| 8 | Frontend auth slice | `pages/Login.tsx`, `AuthContext`, `RequireAuth`, `api/client.ts` (replaces today's `api.ts`; reads `import.meta.env.VITE_API_URL` instead of the hardcoded `http://127.0.0.1:8000`; injects JWT via cookie or `localStorage` per env) | 3 |
+| 9 | Frontend app shell | `AppShell` (sidebar + header + outlet), routes for the 7 pages (skeletons OK), Dashboard with last-N jobs from `/analyses/history` | 8 |
+| 10 | Frontend upload + result | `pages/NewAnalysis.tsx` (reuses the MVP UploadPanel/WorkflowSteps), `pages/AnalysisResult.tsx` reading from `/analyses/{id}` | 7, 9 |
+| 11 | History list | History page with paginated table + filters (project, status, date) | 7, 9 |
 
 ### R.2 Phase 2 — Real product
 
+The exit criterion for Phase 2 is: *the platform runs in production with managed infrastructure, animation polish, exports, and an automated test suite*.
+
 | # | Task | Deliverable | Depends on |
 |---|---|---|---|
-| 8 | AI pipeline integration | Background worker (BackgroundTasks → Celery); `analysis_results` row written on completion; artefacts uploaded to object storage | Phase 1 |
-| 9 | Result page | Tabs (overlay / mask / density / morphology); KPI tiles; status polling | 8 |
-| 10 | Morphology + density outputs | Morphology rows persisted; density heatmap PNG generated and stored; result endpoints `morphology` and `density` | 8 |
-| 11 | Export | CSV / PNG / PDF generation; download URLs; `exports` table | 9, 10 |
-| 12 | Animation polish | Framer Motion variants for KPI grid, modal, result reveal; route cross-fade | 6, 9 |
-| 13 | Playwright tests | Login, upload, result visibility, history filter, export, dashboard + result visual regression | 6, 9, 11 |
-| 14 | Deployment | Vercel for frontend, Railway/Render/VPS for backend, managed Postgres, S3 storage, secret management, custom domain | All above |
+| 12 | Result depth | `morphology_records` table + bulk insert; `GET /results/{id}/morphology`, `GET /results/{id}/density`, `GET /results/{id}/overlay`; tabs on the result page | Phase 1 |
+| 13 | Object storage abstraction | `ObjectStorage` interface, `LocalFsStorage` (dev), `S3Storage` (prod); switch via `Settings.storage_bucket`; signed URLs for binary endpoints | 12 |
+| 14 | Production worker | Move `process_job` from `BackgroundTasks` to **Celery + Redis** (queues `inference`, `default`); retries with exponential backoff | 13 |
+| 15 | Exports | CSV / PNG / PDF generation; `exports` table; `POST /reports/{id}/export-{csv|png|pdf}`; Reports page with export modal + success toast | 12 |
+| 16 | Security hardening | `slowapi` rate limiting on login + upload + reports; `require_role("admin")` for Settings → Admin; HTTPS-only headers (HSTS, secure cookies) | Phase 1 |
+| 17 | Animation polish | Add `framer-motion`; introduce `lib/motion.ts` shared variants; wire `MotionConfig reducedMotion="user"`; apply the 12 recipes from the Animation Guide; migrate the dark MVP palette to the production light palette (Section M.1) | 9, 10 |
+| 18 | Tests | pytest per router (auth, projects, analyses, results, reports) against a Postgres test DB; Playwright E2E for login, upload, result, history, export; visual regression for Dashboard and Result | 11, 15 |
+| 19 | Deployment | Vercel for frontend with `VITE_API_URL` per environment; backend Dockerfile on Railway/Render/VPS; managed Postgres + Redis; S3-compatible bucket; secret management; HTTPS; custom domain | 14, 15, 16, 18 |
 
 ---
 
