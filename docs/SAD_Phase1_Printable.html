@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAD Document - Phase 1 - Deeply Analytics</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #2980b9; margin-top: 40px; }
+        h3 { color: #16a085; }
+        .meta-info {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-left: 4px solid #3498db;
+            margin-bottom: 30px;
+        }
+        .code-block {
+            background-color: #f4f4f4;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', Courier, monospace;
+            overflow-x: auto;
+        }
+        .diagram-container {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            text-align: center;
+        }
+        @media print {
+            body { padding: 0; }
+            .diagram-container { break-inside: avoid; }
+        }
+    </style>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+</head>
+<body>
+
+    <h1>Software Architecture Document (SAD) - Phase 1</h1>
+    
+    <div class="meta-info">
+        <strong>Project:</strong> Software Architecture Project - Phase 1<br>
+        <strong>Target System:</strong> Deeply Analytics<br>
+        <strong>Architecture Style:</strong> Layered Architecture (REST API)<br>
+        <strong>Date:</strong> 02 May 2026
+    </div>
+
+    <h2>Step 1: System Selection</h2>
+
+    <h3>Target System Definition</h3>
+    <p><strong>Deeply Analytics</strong> is a web-first SaaS platform designed to automate the analysis of microscopy and histopathology images. It wraps a robust AI pipeline (U-Net) for nuclei segmentation, counting, and morphological measurement into an accessible, persistent web application.</p>
+
+    <h3>System Purpose</h3>
+    <p>Manual nuclei counting and morphological measurement are slow, prone to observer bias, and hard to reproduce. Deeply Analytics solves this by providing a deterministic AI-powered pipeline accessible via a web interface, enabling researchers to quickly obtain quantitative analytics (cell count, density, morphology) without requiring command-line tools or local GPU resources.</p>
+
+    <h3>Target Users</h3>
+    <ul>
+        <li><strong>Researchers / Biologists:</strong> Upload microscopy images, view segmented results, and export morphology data for studies.</li>
+        <li><strong>Pathologists:</strong> Use the density heatmaps and overlay visualizations to assist in tissue analysis.</li>
+        <li><strong>System Administrators:</strong> Manage user access, monitor system health, and configure AI inference parameters.</li>
+    </ul>
+
+    <h3>System Functionalities</h3>
+    <ul>
+        <li><strong>Image Upload & Preprocessing:</strong> Accept microscopy images (PNG, JPG, TIFF) and normalize them for the AI model.</li>
+        <li><strong>Nuclei Segmentation & Counting:</strong> Run PyTorch-based U-Net inference to generate predicted masks and connected-components for nuclei counting.</li>
+        <li><strong>Morphology & Density Extraction:</strong> Calculate area, perimeter, circularity, and density heatmaps for each image.</li>
+        <li><strong>Result Visualization:</strong> Interactive React dashboard displaying the original image, mask, overlay, and statistics.</li>
+        <li><strong>Data Persistence & Export:</strong> Store analysis jobs in a PostgreSQL database and allow exporting reports (CSV, PDF).</li>
+    </ul>
+
+    <hr>
+
+    <h2>Step 2: Software Architecture Document (SAD - Version 1)</h2>
+
+    <h3>1. Use Case View</h3>
+    <p>The Use Case View describes the system's functionality from the perspective of its end users.</p>
+
+    <div class="diagram-container">
+        <pre class="mermaid">
+usecaseDiagram
+    actor Researcher as "Researcher / Biologist"
+    actor Admin as "System Administrator"
+
+    rectangle "Deeply Analytics System" {
+        usecase UC1 as "Authenticate (Login)"
+        usecase UC2 as "Manage Projects"
+        usecase UC3 as "Upload Microscopy Image"
+        usecase UC4 as "View Analysis Results"
+        usecase UC5 as "Export Data (CSV/PDF)"
+        usecase UC6 as "Manage Users & Roles"
+        usecase UC7 as "Monitor System Health"
+    }
+
+    Researcher --> UC1
+    Researcher --> UC2
+    Researcher --> UC3
+    Researcher --> UC4
+    Researcher --> UC5
+
+    Admin --> UC1
+    Admin --> UC6
+    Admin --> UC7
+    Admin --> UC4
+        </pre>
+    </div>
+
+    <h4>Partial UI Code Implementation</h4>
+    <p>The use cases for uploading images (UC3) and viewing results (UC4) are implemented in the React frontend.</p>
+    <p><strong>File:</strong> <code>frontend/src/components/UploadPanel.tsx</code> (Excerpts)</p>
+    <div class="code-block">
+<pre>export default function UploadPanel({ file, busy, onFileSelected, onAnalyze }) {
+  // Handles Drag & Drop image upload for UC3
+  return (
+    &lt;div className="upload-zone" onDrop={handleDrop}&gt;
+      &lt;p&gt;{file ? file.name : "Drop a microscopy image here..."}&lt;/p&gt;
+      &lt;button disabled={!file || busy} onClick={onAnalyze}&gt;
+        {busy ? "Analysing..." : "Run analysis"}
+      &lt;/button&gt;
+    &lt;/div&gt;
+  );
+}</pre>
+    </div>
+
+    <p><strong>File:</strong> <code>frontend/src/components/ResultViewer.tsx</code> (Excerpts)</p>
+    <div class="code-block">
+<pre>export default function ResultViewer({ result }) {
+  // Renders the output visualization for UC4
+  return (
+    &lt;div className="results-grid"&gt;
+      &lt;img src={fileUrl(result.input_url)} alt="Original" /&gt;
+      &lt;img src={fileUrl(result.mask_url)} alt="Mask" /&gt;
+      &lt;img src={fileUrl(result.overlay_url)} alt="Overlay" /&gt;
+      &lt;MetricCard label="Estimated cell count" value={result.cell_count} /&gt;
+    &lt;/div&gt;
+  );
+}</pre>
+    </div>
+
+    <h3>2. Logical View</h3>
+    <p>The Logical View presents the structural organization of the system, mapping to the chosen <strong>Layered Architecture</strong> style.</p>
+
+    <div class="diagram-container">
+        <pre class="mermaid">
+flowchart TD
+    subgraph PresentationLayer ["Presentation Layer (Frontend)"]
+        UI[React UI Components]
+        APIClient[API Client / Axios]
+    end
+
+    subgraph APILayer ["API Layer (Backend)"]
+        FastAPI[FastAPI Routers]
+        AuthMid[Auth & CORS Middleware]
+    end
+
+    subgraph ServiceLayer ["Service Layer (Business Logic)"]
+        AnalysisSvc[Analysis Service]
+        AuthSvc[Auth Service]
+    end
+
+    subgraph AILayer ["AI Inference Layer"]
+        Preproc[Image Preprocessing]
+        UNet[PyTorch U-Net Model]
+        Postproc[Postprocessing & Counting]
+    end
+
+    subgraph DataLayer ["Data Access Layer"]
+        ORM[SQLModel / SQLAlchemy]
+        Storage[Local/S3 Object Storage]
+        DB[(PostgreSQL Database)]
+    end
+
+    UI --> APIClient
+    APIClient -- "HTTP / REST" --> FastAPI
+    FastAPI --> AuthMid
+    AuthMid --> AnalysisSvc
+    AuthMid --> AuthSvc
+    AnalysisSvc --> AILayer
+    AnalysisSvc --> ORM
+    AnalysisSvc --> Storage
+    ORM --> DB
+        </pre>
+    </div>
+
+    <h4>Partial Backend Code Implementation</h4>
+    <p>The Logical View is implemented in the FastAPI backend, routing requests to the Analysis Service.</p>
+    <p><strong>File:</strong> <code>backend/main.py</code> (API Layer Excerpt)</p>
+    <div class="code-block">
+<pre>@app.post("/api/analyze", response_model=AnalysisResponse)
+async def analyze(file: UploadFile = File(...)) -> AnalysisResponse:
+    # Validates input and delegates to Service Layer
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image.")
+    payload = await file.read()
+    result = analysis_service.analyze(payload, file.filename)
+    return AnalysisResponse(**analysis_service.result_to_dict(result))</pre>
+    </div>
+
+    <h3>3. Process View</h3>
+    <p>The Process View illustrates the dynamic behavior of the system, showing how components interact during runtime to execute a specific workflow.</p>
+
+    <div class="diagram-container">
+        <pre class="mermaid">
+sequenceDiagram
+    participant User
+    participant Frontend as React UI
+    participant API as FastAPI Router
+    participant Service as Analysis Service
+    participant AI as AI Model (U-Net)
+    participant DB as Storage / DB
+
+    User->>Frontend: Upload Image & Click 'Run'
+    Frontend->>API: POST /api/analyze (multipart/form-data)
+    API->>Service: analyze(image_bytes)
+    
+    Service->>AI: decode_image(image_bytes)
+    AI-->>Service: image_rgb
+    
+    Service->>AI: predict_with_model(image_rgb)
+    Note over AI: GPU/CPU Inference<br/>PyTorch U-Net
+    AI-->>Service: binary_mask
+    
+    Service->>AI: count_nuclei_from_binary(mask)
+    AI-->>Service: cell_count
+    
+    Service->>DB: Save input, mask, overlay files
+    DB-->>Service: File paths
+    
+    Service-->>API: AnalysisResult (count, paths, metadata)
+    API-->>Frontend: HTTP 200 JSON Response
+    Frontend-->>User: Display Output & Metrics
+        </pre>
+    </div>
+
+    <h4>Related Code Snippets</h4>
+    <p>The sequence diagram above directly maps to the orchestration logic within the Service layer.</p>
+    <p><strong>File:</strong> <code>backend/services/analysis_service.py</code> (Process Execution Excerpt)</p>
+    <div class="code-block">
+<pre>def analyze(image_bytes: bytes, original_filename: str) -> AnalysisResult:
+    # 1. Prepare and decode input
+    image_rgb = _decode_image(image_bytes)
+    
+    # 2. Execute AI Inference
+    mask = _predict_with_model(image_rgb)
+    overlay = make_overlay(image_rgb, mask)
+    
+    # 3. Postprocess and count
+    cell_count = count_nuclei_from_binary(mask, min_area=MIN_AREA)
+    
+    # 4. Save artifacts to Data Layer
+    job_id = uuid.uuid4().hex[:12]
+    cv2.imwrite(str(RESULT_DIR / f"{job_id}_mask.png"), mask)
+    cv2.imwrite(str(RESULT_DIR / f"{job_id}_overlay.png"), cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR))
+    
+    # 5. Return structured result
+    return AnalysisResult(
+        job_id=job_id,
+        status="ok",
+        message="Analysis complete.",
+        cell_count=int(cell_count),
+        input_url=f"/files/{job_id}_input.png",
+        mask_url=f"/files/{job_id}_mask.png",
+        overlay_url=f"/files/{job_id}_overlay.png",
+        metadata={"original_filename": original_filename}
+    )</pre>
+    </div>
+
+</body>
+</html>

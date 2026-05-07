@@ -90,7 +90,7 @@ export default function App() {
       </section>
 
       <p className="footer-note">
-        Local prototype · Backend: FastAPI on http://127.0.0.1:8000 · Frontend: Vite on
+        Local prototype · Backend: FastAPI on http://127.0.0.1:8080 · Frontend: Vite on
         http://127.0.0.1:5173
       </p>
     </div>
