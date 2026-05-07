@@ -37,7 +37,7 @@ The AI-Powered Microscopy Analysis System is a web-based platform that helps bio
 
 The project is useful because manual nuclei counting is slow, subjective, and difficult to scale. By replacing the manual step with an AI pipeline, the system delivers consistent, repeatable measurements and frees researchers to focus on interpretation. From the perspective of this course, the project is also a vehicle to apply software project management and technical monitoring practices: progress is tracked through a management monitoring plan, and runtime behaviour is observed through a technical monitoring plan that watches API latency, inference duration, error rate, queue length, model availability, and uptime.
 
-The current repository contains a working AI core — U-Net training, inference, counting, density-map generation, morphology extraction, and a Streamlit prototype dashboard **[Implemented]**. The full SaaS-style web application (FastAPI backend, React+Vite+TypeScript frontend, PostgreSQL persistence, JWT authentication, deployment to Vercel and Railway) is the **[Proposed]** target architecture for the academic plan.
+The current repository contains a working AI core — U-Net training, inference, counting, density-map generation, and morphology extraction **[Implemented]** — together with a FastAPI backend exposing `GET /api/health`, `POST /api/analyze`, and `GET /files/{filename}` **[Implemented MVP]** and a React + Vite + TypeScript multi-page dashboard (Login, Dashboard, New Analysis, Analysis Result, Analysis History, Reports, Settings) **[Implemented MVP]**. PostgreSQL persistence, JWT authentication, role-based access, real export automation, background job queues, an operational monitoring page, and production deployment to Vercel/Railway remain the **[Proposed]** target architecture for the academic plan.
 
 ---
 
@@ -45,23 +45,23 @@ The current repository contains a working AI core — U-Net training, inference,
 
 ### 3.1 In-scope features
 
-- Microscopy image upload and storage **[Proposed]**
+- Microscopy image upload and storage **[Implemented MVP]** (file-system storage in `backend/storage/`; S3-compatible storage remains [Proposed])
 - U-Net nuclei segmentation **[Implemented]**
 - Connected-component cell counting **[Implemented]**
 - Density heatmap generation **[Implemented]**
 - Morphology feature extraction (area, circularity, eccentricity, etc.) **[Implemented]**
 - Overlay and mask visualisation **[Implemented]**
-- CSV / structured export of analysis results **[Implemented]**
-- Web dashboard — login page **[Proposed]**
-- Web dashboard — upload page **[Proposed]**
-- Web dashboard — analysis job status page **[Proposed]**
-- Web dashboard — results visualisation page **[Proposed]**
-- Web dashboard — monitoring page **[Proposed]**
-- Web dashboard — export / report page **[Proposed]**
+- CSV / structured export of analysis results — AI-core CSV outputs in `outputs/` **[Implemented]**; the dashboard Reports page export buttons are **[Proposed]** placeholders, and one-click export automation is not wired
+- Web dashboard — login page **[Implemented MVP — visual demo only, no real authentication]**
+- Web dashboard — upload page **[Implemented]** (the New Analysis page)
+- Web dashboard — analysis job status page **[Partial]** (in-page workflow stepper Upload → Segment → Count → Report; async job-status polling remains [Proposed])
+- Web dashboard — results visualisation page **[Implemented]** (the Analysis Result page)
+- Web dashboard — monitoring page **[Partial]** (the Dashboard page renders four KPI cards from session-local data; a full operational monitoring page remains [Proposed])
+- Web dashboard — export / report page **[Partial]** (the Reports page exists with placeholder export cards; real export wiring remains [Proposed])
 - Background inference jobs so the API does not block on long analyses **[Proposed]**
 - JWT authentication, role-based access, rate limiting **[Proposed]**
 - Management and technical monitoring dashboards **[Proposed]**
-- 3D-inspired design language for the dashboard **[Proposed]**
+- 3D-inspired design language for the dashboard **[Partial]** (glassmorphism tokens, gradient accents, layered shadows, depth-tinted result tiles, and an Inter-based type scale are shipped in the live CSS; the isometric workflow illustration, hero illustration, and full Figma mockup set remain [Proposed])
 
 ### 3.2 Out-of-scope features
 
@@ -106,10 +106,10 @@ A fourth problem is internal to this course: the project itself must be **monito
 
 The proposed solution is a web-based AI microscopy analysis platform with four interacting parts:
 
-1. **A React + Vite + TypeScript dashboard** **[Proposed]** that lets the researcher log in, upload an image, follow analysis progress, view results (overlay, mask, heatmap, count, morphology), and export a report.
-2. **A FastAPI service** **[Proposed]** that exposes REST endpoints for authentication, upload, analysis, job status, and results retrieval, validated by Pydantic models.
+1. **A React + Vite + TypeScript multi-page dashboard** **[Implemented MVP]** with seven pages — Login, Dashboard, New Analysis, Analysis Result, Analysis History, Reports, Settings — that lets the researcher sign in (visual demo only), upload an image, follow the in-page workflow stepper, view results (overlay, mask, count, processing time), and browse local-session history. Real authentication, an operational monitoring page, and working export automation remain **[Proposed]**.
+2. **A FastAPI service** **[Implemented MVP]** that exposes `GET /api/health`, `POST /api/analyze`, and `GET /files/{filename}`, validated by Pydantic models **[Implemented]**. Authentication endpoints, async job-status endpoints, project/history endpoints, and full RBAC remain **[Proposed]**.
 3. **An AI processing layer** **[Implemented]** built around a PyTorch U-Net (ResNet18 encoder) that performs preprocessing, segmentation, thresholding, connected-component labelling, counting, and morphological feature extraction.
-4. **A persistence and storage layer** **[Proposed]** in which PostgreSQL (via SQLModel + Alembic) stores structured metadata and references, while object/file storage holds the binary artefacts (input images, masks, overlays, heatmaps, exports).
+4. **A persistence and storage layer** **[Partial]** in which the local file system holds the binary artefacts (input images, masks, overlays) under `backend/storage/`. PostgreSQL with SQLModel + Alembic for structured metadata is **[Partial]** (models in `backend/db/models/` and a baseline Alembic migration exist; live database wiring remains **[Proposed]**), and S3-compatible object storage remains **[Proposed]**.
 
 Long-running AI inference is dispatched to a background job runner so HTTP requests return quickly and the UI can poll job status. Both the management side and the technical side of the project are visible through monitoring surfaces (Section 11 and Section 12).
 
@@ -121,13 +121,13 @@ The current pipeline performs binary semantic segmentation followed by connected
 
 | Layer | Technology | Status | Selection rationale |
 |---|---|---|---|
-| Frontend framework | React + Vite + TypeScript | [Proposed] | Fast dev loop, typed components, mature ecosystem for SaaS dashboards |
-| API framework | FastAPI | [Proposed] | First-class async, automatic OpenAPI, native Pydantic integration |
-| Validation | Pydantic | [Proposed] | Schema enforcement on requests, responses, and config |
-| Architecture pattern | Layered (route → service → data) | [Proposed] | Separation of concerns, testability, clear ownership |
+| Frontend framework | React + Vite + TypeScript | [Implemented MVP] | Fast dev loop, typed components, mature ecosystem for SaaS dashboards |
+| API framework | FastAPI | [Implemented MVP] | First-class async, automatic OpenAPI, native Pydantic integration |
+| Validation | Pydantic | [Implemented] | Schema enforcement on requests, responses, and config |
+| Architecture pattern | Layered (route → service → data) | [Partial] | Separation of concerns, testability, clear ownership; routes and a service module exist for the analyse path, broader layering remains [Proposed] |
 | Database | PostgreSQL | [Proposed] | Relational integrity for users, jobs, and analysis records |
-| ORM | SQLModel (over SQLAlchemy) | [Proposed] | One model class for both ORM and Pydantic validation |
-| Migration | Alembic | [Proposed] | Version-controlled schema evolution |
+| ORM | SQLModel (over SQLAlchemy) | [Partial] | Models defined in `backend/db/models/`; live SQL session and repositories remain [Proposed] |
+| Migration | Alembic | [Partial] | Baseline migration `20260502_0001_initial_schema.py` exists; no live database to migrate against yet |
 | AI framework | PyTorch + segmentation_models_pytorch | [Implemented] | U-Net with ResNet18 encoder, Dice + BCE loss, validated checkpoint |
 | Image / CV | OpenCV, scikit-image, PIL, NumPy | [Implemented] | Pre/postprocessing, connected components, morphology |
 | Background jobs | Async task queue (e.g. Celery / RQ / FastAPI BackgroundTasks) | [Proposed] | Keeps API non-blocking during inference |
@@ -141,7 +141,7 @@ The current pipeline performs binary semantic segmentation followed by connected
 
 ### 6.1 Current vs. target
 
-The current code base implements the AI core and a Streamlit-based interactive prototype. The web stack (FastAPI, React, PostgreSQL, SQLModel, Alembic, JWT, Vercel, Railway, Playwright) is the **target** academic architecture and is described as *Proposed*.
+The current code base implements the AI core, a FastAPI backend MVP (with `GET /api/health`, `POST /api/analyze`, and `GET /files/{filename}` endpoints validated by Pydantic), and a React + Vite + TypeScript multi-page dashboard MVP that talks to that backend. A Streamlit prototype (`src/app.py`) also exists as a developer-facing reference for the AI core, but the React dashboard is now the primary working demo surface. The remaining web-stack pieces — PostgreSQL with SQLModel + Alembic wired to a live database, JWT authentication and RBAC, background job queues, real export automation, Vercel/Railway deployment, and Playwright end-to-end coverage — are the **target** academic architecture and remain *Proposed*.
 
 ---
 
@@ -164,21 +164,21 @@ The current code base implements the AI core and a Streamlit-based interactive p
 The proposed architecture is layered. Each layer has a single responsibility and a well-defined interface to the next.
 
 ```
-┌──────────────────────────────────────────────┐
-│ Frontend layer  (React + Vite + TS) [Proposed]│
-└──────────────────────────────────────────────┘
-                  │  HTTPS (JSON + JWT)
-┌──────────────────────────────────────────────┐
-│ API route layer  (FastAPI routers) [Proposed]│
-└──────────────────────────────────────────────┘
-                  │  validated DTOs
-┌──────────────────────────────────────────────┐
-│ Service layer  (orchestration) [Proposed]    │
-└──────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│ Frontend layer  (React + Vite + TS) [Implemented MVP]│
+└──────────────────────────────────────────────────────┘
+                  │  HTTPS (JSON; JWT proposed)
+┌──────────────────────────────────────────────────────┐
+│ API route layer  (FastAPI routers)  [Implemented MVP]│
+└──────────────────────────────────────────────────────┘
+                  │  validated DTOs (Pydantic)
+┌──────────────────────────────────────────────────────┐
+│ Service layer  (orchestration)              [Partial]│
+└──────────────────────────────────────────────────────┘
        │                       │
 ┌──────────────┐      ┌──────────────────────┐
 │ AI processing│      │ Data access layer    │
-│ [Implemented]│      │ (SQLModel) [Proposed]│
+│ [Implemented]│      │ (SQLModel) [Partial] │
 └──────────────┘      └──────────────────────┘
        │                       │
 ┌──────────────┐      ┌──────────────────────┐
@@ -186,37 +186,42 @@ The proposed architecture is layered. Each layer has a single responsibility and
 │ [Partial]    │      │ [Proposed]           │
 └──────────────┘      └──────────────────────┘
                   │
-┌──────────────────────────────────────────────┐
-│ Monitoring layer (logs, metrics, dashboards) │
-│ [Proposed]                                   │
-└──────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│ Monitoring layer (logs, metrics, dashboards)         │
+│ [Proposed]                                           │
+└──────────────────────────────────────────────────────┘
 ```
 
-- **Frontend layer.** Renders pages, talks to the API over HTTPS, holds JWT, surfaces 3D-inspired UI.
-- **API route layer.** FastAPI routers per resource (auth, uploads, jobs, results, monitoring). Pydantic models guard inputs and outputs.
-- **Service layer.** Orchestrates workflows: e.g. *receive image → persist metadata → enqueue inference → on completion, persist results → notify*.
+- **Frontend layer.** Renders pages, talks to the API over HTTPS, surfaces the partial 3D-inspired UI; the implemented MVP is a seven-page React + Vite + TS dashboard. JWT handling is **[Proposed]**.
+- **API route layer.** FastAPI routers; the MVP exposes `GET /api/health`, `POST /api/analyze`, and `GET /files/{filename}` **[Implemented MVP]**, with Pydantic models guarding inputs and outputs. Routers per resource for auth, uploads, jobs, history, and monitoring are **[Proposed]**.
+- **Service layer.** Orchestrates workflows: e.g. *receive image → persist metadata → enqueue inference → on completion, persist results → notify*. In the MVP the analysis service runs synchronously in-process; persistence and the enqueue/notify path are **[Proposed]**.
 - **AI processing layer.** PyTorch U-Net, OpenCV postprocessing, connected-component counting, density and morphology computations.
-- **Data access layer.** SQLModel repositories that hide SQL detail from services.
-- **Database layer.** PostgreSQL holds users, jobs, analysis records, audit metadata; Alembic migrations track schema.
-- **Storage layer.** Object/file storage for images, masks, overlays, heatmaps, exports — the database holds references only.
+- **Data access layer.** SQLModel models are defined in `backend/db/models/` **[Partial]**; live SQL session and repositories that hide SQL detail from services are **[Proposed]**.
+- **Database layer.** PostgreSQL holds users, jobs, analysis records, audit metadata; Alembic migrations track schema. A baseline migration exists; live database wiring is **[Proposed]**.
+- **Storage layer.** Local file system under `backend/storage/` holds the binary artefacts (input images, masks, overlays) today **[Partial]**; S3-compatible object storage and a separation in which the database holds references only are **[Proposed]**.
 - **Monitoring layer.** Application logs, structured events, and metric exporters that feed a monitoring dashboard.
 
 ---
 
 ## 9. Basic UI / Dashboard Design
 
-The dashboard is described page-by-page. Visual language and 3D-inspired direction are detailed in `UI_3D_DESIGN_CONCEPT.md` and Section 10.
+The dashboard is described page-by-page. The implemented MVP is a seven-page React + Vite + TypeScript application; visual language and 3D-inspired direction are detailed in `UI_3D_DESIGN_CONCEPT.md` and Section 10.
 
-| Page | Purpose | Key elements |
-|---|---|---|
-| **Login page** | Authenticate the researcher | Email, password, error state, link to recovery; protected routes redirect here |
-| **Image upload page** | Submit a microscopy image for analysis | Drag-and-drop area, file metadata preview, "Start analysis" call-to-action |
-| **Analysis job status page** | Show progress while the AI runs | Job ID, queue position, stage indicator (preprocess → predict → postprocess → count), elapsed time |
-| **Results visualisation page** | Show the analysis output | Side-by-side original vs. overlay, segmentation mask, density heatmap, count, morphology table |
-| **Monitoring dashboard** | Operational visibility | Latency, error rate, queue length, recent failed jobs, model availability (Section 12) |
-| **Export / report page** | Take results out of the system | CSV download, PDF report, links to stored artefacts |
+| Page | Status | Purpose | Key elements |
+|---|---|---|---|
+| **Login** | [Implemented MVP — visual demo only, no real authentication] | Show a sign-in surface and a route into the dashboard | Email + password fields, "Sign in" button that admits any non-empty email; explicit "Demo mode" label |
+| **Dashboard** | [Implemented MVP] | Overview of analyses and system status | Four KPI cards (Total analyses, Completed, Avg cell count, Model status), Recent activity list, Quick actions; KPI data is sourced from session-local history |
+| **New Analysis** | [Implemented] | Upload an image and run nuclei segmentation | Workflow stepper (Upload → Segment → Count → Report), drag-and-drop upload panel, inline result viewer, "View full result" hand-off |
+| **Analysis Result** | [Implemented] | Standalone view of the most recent result | Original / mask / overlay tiles, cell count, processing time, mode badge |
+| **Analysis History** | [Implemented MVP — uses local browser storage] | Past analyses run in this session | Table (date, file, cells, mode, time); falls back to clearly-labelled placeholder rows when empty; backend-backed history endpoints remain [Proposed] |
+| **Reports / Export** | [Implemented MVP — placeholder] | Future export surface | Three disabled cards (CSV / PNG / PDF) with "Coming soon" badges; real export automation is [Proposed] |
+| **Settings / Admin** | [Implemented MVP — placeholder] | Profile, model configuration, system settings | Three sections with read-only fields; placeholder labels make the lack of persistence explicit |
 
-A Streamlit prototype that already covers upload, segmentation, counting, density heatmap, and morphology lives at `src/app.py` **[Implemented]** and serves as the visual reference until the React dashboard is built.
+A future operational monitoring page (latency, error rate, queue length, recent failed jobs, model availability — see Section 12) is **[Proposed]**; the current Dashboard page covers a subset of these as session-local KPIs.
+
+**Note on exports.** The AI core already produces structured CSV outputs (morphology summaries) under `outputs/` **[Implemented]**, but the Reports page export buttons in the dashboard are currently **placeholders**; wiring them to those AI-core CSVs and to a downloadable archive (CSV / PNG bundle / PDF) is **[Proposed]**.
+
+A Streamlit prototype (`src/app.py`) **[Implemented]** also exists as a developer-facing reference for the AI core; the React + Vite + TS multi-page dashboard described above is now the primary working demo surface.
 
 ---
 
@@ -228,7 +233,7 @@ This subsection summarises the 3D-inspired direction. The full specification is 
 - **Why 3D was selected.** Microscopy results are inherently visual; depth cues help the user separate the original image, the overlay, the heatmap, and the quantitative metrics. The same visual hierarchy supports clearer communication in the report and the in-class presentation.
 - **Pages that use 3D-inspired elements.** Landing/hero, login, upload, analysis status, results, monitoring (see `UI_3D_DESIGN_CONCEPT.md` for per-page treatment).
 - **How 3D improves visual communication.** Floating result cards, an isometric workflow diagram of the AI pipeline, layered panels in the monitoring dashboard, a 3D-style hero illustration on the landing page, and depth-tinted segmentation tiles all give evaluators an immediate read of the system.
-- **Conceptual or implemented.** **Proposed / conceptual** for this term. The recommended deliverable is a Figma mockup set plus a CSS direction (glassmorphism tokens, shadow scale, layout grid) ready to plug into the planned React dashboard.
+- **Conceptual or implemented.** **Partial.** The CSS direction (glassmorphism tokens, gradient accents, shadow scale, layered panels, depth-tinted result tiles, responsive layout grid, Inter type scale) is now shipped in the live React + Vite + TS dashboard at `frontend/src/styles.css`. The broader 3D-inspired vision — the isometric workflow illustration, the hero illustration, and a full Figma mockup set — remains **proposed / conceptual** for this term.
 
 ---
 
@@ -326,4 +331,4 @@ The AI-Powered Microscopy Analysis System fits the *Software Project Management 
 
 ---
 
-*Document version: v0.2 — 2026-05-01*
+*Document version: v0.3 — 2026-05-03*

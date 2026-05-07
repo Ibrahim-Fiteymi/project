@@ -19,11 +19,11 @@ The arc starts in the lab (a researcher counting nuclei by hand), moves to the s
 | 2 | Hook — "counting nuclei by hand" | 0:30 | A researcher counts thousands of nuclei manually. It is slow, inconsistent, hard to scale. | M1 |
 | 3 | Problem statement | 0:30 | Three pain points: speed, consistency, scale — plus the need to monitor project execution and system performance. | M1 |
 | 4 | Proposed solution | 0:35 | Web-based AI platform: upload → segment → count → visualise → export. Anchored on a U-Net we already trained. | M2 |
-| 5 | System workflow & architecture | 0:50 | Layered architecture: React frontend → FastAPI → service layer → AI module → SQLModel/Postgres + object storage. Show the flow of one image through the system. | M2 |
+| 5 | System workflow & architecture | 0:50 | Layered architecture, currently running as an MVP: React + Vite + TS multi-page dashboard talks to a FastAPI backend (`GET /api/health`, `POST /api/analyze`, `GET /files/{filename}`); SQLModel/Postgres data access, JWT auth, and background queues remain proposed. Show the flow of one image through the live system. | M2 |
 | 6 | AI pipeline & demo snapshot | 0:40 | U-Net + thresholding + connected components → count + density heatmap + morphology. Show real outputs from the repo. | M3 |
 | 7 | Management monitoring | 0:30 | The 9 management metrics; how the weekly status report keeps the project honest under a 4-person team. | M1 |
 | 8 | Technical monitoring | 0:30 | The 11 runtime metrics; thresholds; canary inference; how monitoring closes the loop on quality. | M2 / M3 |
-| 9 | 3D design concept | 0:35 | Glassmorphism, depth, layered panels, isometric workflow illustration, hero illustration. Show the Figma mockup set. Explicitly: **proposed**. | M4 |
+| 9 | 3D design concept | 0:35 | Glassmorphism, depth, layered panels, isometric workflow illustration, hero illustration. The CSS direction (tokens, gradient accents, layered shadows) is already shipped in the live dashboard; the isometric/hero illustrations and full Figma mockup set remain **proposed**. | M4 |
 | 10 | Value creation | 0:25 | Customer, business, functional, operational, technical value — one line each. | M4 |
 | 11 | Risks & how we handle them | 0:25 | The 4-vs-6–8 compliance risk, model accuracy in dense regions, schedule, video permission. | M1 |
 | 12 | Final message & thanks | 0:25 | What we built, what we monitored, what we learned. Invite questions. | M1 |
@@ -35,7 +35,7 @@ The arc starts in the lab (a researcher counting nuclei by hand), moves to the s
 - **Hard cap.** If the team is over budget at any rehearsal, cut bullets — never add slides.
 - **Two timed dry runs.** Required in the final two weeks (see `MANAGEMENT_MONITORING_PLAN.md` metric #5).
 - **One slide, one idea.** No paragraphs on slides. Speaker notes carry the detail.
-- **Demo evidence.** Slide 6 uses outputs already in `outputs/` (overlays, density maps, morphology summary) so we are showing real, verified results.
+- **Demo evidence.** Slide 6 uses outputs already in `outputs/` (overlays, density maps, morphology summary) so we are showing real, verified results. If time allows, the live multi-page React dashboard talking to the FastAPI backend may also be shown briefly during slide 5.
 - **3D framing.** On slide 9, M4 explicitly says "proposed design concept" so evaluators do not expect a running 3D engine.
 - **Hand-off cues.** Each presenter ends with a one-sentence cue ("…and that brings me to monitoring — over to M2").
 - **Backup video.** Recorded version of this exact deck, with the same timing, is uploaded ahead of the deadline (see `FINAL_SUBMISSION_CHECKLIST.md`).

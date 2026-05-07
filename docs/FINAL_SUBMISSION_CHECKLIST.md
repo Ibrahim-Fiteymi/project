@@ -22,9 +22,9 @@
 
 ## C. UI / Dashboard
 
-- [ ] Page list (login, upload, status, results, monitoring, export) is described in Section 9.
-- [ ] Streamlit prototype (`src/app.py`) runs end-to-end on a fresh checkout (covered as the working demo surface).
-- [ ] Screenshots of working outputs (overlay, mask, density heatmap, count, morphology) are inserted into the report and slides.
+- [ ] The seven implemented frontend pages (Login, Dashboard, New Analysis, Analysis Result, Analysis History, Reports, Settings) are described in Section 9, with Login labelled visual-demo-only and Reports/Settings labelled MVP placeholders.
+- [ ] **Working demo surface** — React + Vite + TS multi-page dashboard (`frontend/`) plus FastAPI backend (`backend/`) with `GET /api/health`, `POST /api/analyze`, and `GET /files/{filename}` — runs end-to-end on a fresh checkout (`npm run build` succeeds; the upload → analyse → result flow returns a real cell count). The Streamlit prototype (`src/app.py`) is retained as a developer-facing reference for the AI core only and is no longer the primary demo surface.
+- [ ] Screenshots of the live dashboard (Login, Dashboard, New Analysis with a real result, Analysis History) and of the AI-core outputs (overlay, mask, density heatmap, count, morphology) are inserted into the report and slides.
 
 ## D. 3D design concept
 

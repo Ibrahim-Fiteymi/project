@@ -1,16 +1,21 @@
 import { useEffect, useState } from "react";
-import { analyzeImage, getHealth, type AnalysisResponse, type HealthResponse } from "./api";
-import UploadPanel from "./components/UploadPanel";
-import ResultViewer from "./components/ResultViewer";
-import WorkflowSteps, { type WorkflowStage } from "./components/WorkflowSteps";
+import { getHealth, type AnalysisResponse, type HealthResponse } from "./api";
+import DashboardLayout from "./layout/DashboardLayout";
+import type { PageKey } from "./layout/Sidebar";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import NewAnalysis from "./pages/NewAnalysis";
+import AnalysisResult from "./pages/AnalysisResult";
+import AnalysisHistory from "./pages/AnalysisHistory";
+import Reports from "./pages/Reports";
+import Settings from "./pages/Settings";
+import AiChat from "./pages/AiChat";
 
 export default function App() {
-  const [stage, setStage] = useState<WorkflowStage>("upload");
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [result, setResult] = useState<AnalysisResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState<PageKey>("dashboard");
+  const [latestResult, setLatestResult] = useState<AnalysisResponse | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
 
   useEffect(() => {
@@ -19,80 +24,69 @@ export default function App() {
       .catch(() => setHealth(null));
   }, []);
 
-  useEffect(() => {
-    if (!file) {
-      setPreviewUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
-
-  function handleFileSelected(f: File) {
-    setFile(f);
-    setResult(null);
-    setError(null);
-    setStage("upload");
+  function handleSignIn(email: string) {
+    setUserEmail(email);
+    setSignedIn(true);
+    setCurrentPage("dashboard");
   }
 
-  async function handleAnalyze() {
-    if (!file) return;
-    setBusy(true);
-    setError(null);
-    setResult(null);
-    setStage("segment");
-    try {
-      const r = await analyzeImage(file);
-      setStage("count");
-      setResult(r);
-      setStage("report");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setStage("upload");
-    } finally {
-      setBusy(false);
-    }
+  function handleLogout() {
+    setSignedIn(false);
+    setUserEmail(null);
+  }
+
+  function handleAnalysisComplete(r: AnalysisResponse) {
+    setLatestResult(r);
+  }
+
+  if (!signedIn) {
+    return <Login onSignIn={handleSignIn} />;
+  }
+
+  let pageNode;
+  switch (currentPage) {
+    case "dashboard":
+      pageNode = <Dashboard health={health} onNavigate={setCurrentPage} />;
+      break;
+    case "new-analysis":
+      pageNode = (
+        <NewAnalysis
+          onAnalysisComplete={handleAnalysisComplete}
+          onNavigate={setCurrentPage}
+        />
+      );
+      break;
+    case "result":
+      pageNode = <AnalysisResult result={latestResult} onNavigate={setCurrentPage} />;
+      break;
+    case "history":
+      pageNode = (
+        <AnalysisHistory
+          onSelectResult={setLatestResult}
+          onNavigate={setCurrentPage}
+        />
+      );
+      break;
+    case "reports":
+      pageNode = <Reports />;
+      break;
+    case "settings":
+      pageNode = <Settings userEmail={userEmail} health={health} />;
+      break;
+    case "ai-chat":
+      pageNode = <AiChat />;
+      break;
   }
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <span className="tag">MVP Working Web Prototype</span>
-        {health && (
-          <span className={`badge ${health.mode === "model" ? "badge-model" : "badge-fallback"}`}>
-            backend: {health.mode} · {health.device}
-          </span>
-        )}
-        <h1 style={{ marginTop: 12 }}>
-          AI-Powered Microscopy Analysis — Nuclei Segmentation and Cell Counting
-        </h1>
-        <p>
-          Upload one microscopy image. The system runs the trained U-Net, applies connected-component
-          post-processing, and returns the predicted mask, the overlay, and an estimated cell count.
-        </p>
-      </header>
-
-      <section className="panel">
-        <WorkflowSteps stage={stage} />
-      </section>
-
-      <section className="grid-2">
-        <UploadPanel
-          file={file}
-          previewUrl={previewUrl}
-          busy={busy}
-          onFileSelected={handleFileSelected}
-          onAnalyze={handleAnalyze}
-          error={error}
-        />
-        <ResultViewer result={result} busy={busy} />
-      </section>
-
-      <p className="footer-note">
-        Local prototype · Backend: FastAPI on http://127.0.0.1:8080 · Frontend: Vite on
-        http://127.0.0.1:5173
-      </p>
-    </div>
+    <DashboardLayout
+      currentPage={currentPage}
+      onNavigate={setCurrentPage}
+      onLogout={handleLogout}
+      health={health}
+      userEmail={userEmail}
+    >
+      {pageNode}
+    </DashboardLayout>
   );
 }

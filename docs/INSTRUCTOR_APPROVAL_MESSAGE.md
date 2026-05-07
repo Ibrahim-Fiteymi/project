@@ -19,3 +19,5 @@
 | Channel | _[email / course platform / in person]_ |
 | Conditions | _[none / write conditions if any]_ |
 | Evidence on file | Original instructor reply (email screenshot or platform export) — stored alongside this `docs/` folder |
+
+> **Note on the approval date.** The date above (2026-06-06) must be **verified against the instructor's actual reply before final submission**. If the verified date differs, update this row, the corresponding line in `PROJECT_REPORT_DRAFT.md` Section 1, and any reference in the slides.
