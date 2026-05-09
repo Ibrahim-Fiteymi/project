@@ -13,9 +13,8 @@ PRED_MASK_DIR = ROOT / "outputs" / "counting_batch_refined_xmlgt" / "pred_masks"
 OUTPUT_DIR = ROOT / "outputs" / "morphology"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# For morphology only.
-# Counting baseline still uses MIN_AREA = 1 from Report 3.
-# Morphology uses MIN_AREA = 5 to avoid unstable shape measurements from tiny noisy objects.
+# Pipeline standard: MIN_AREA = 5 for both counting and morphology.
+# Filters out tiny noisy components that destabilise shape measurements.
 MIN_AREA = 5
 
 

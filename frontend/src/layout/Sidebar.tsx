@@ -1,35 +1,26 @@
-export type PageKey =
-  | "dashboard"
-  | "new-analysis"
-  | "result"
-  | "history"
-  | "reports"
-  | "settings"
-  | "ai-chat";
+import { NavLink } from "react-router-dom";
 
 interface NavItem {
-  key: PageKey;
+  to: string;
   label: string;
   icon: string;
 }
 
 const NAV: NavItem[] = [
-  { key: "dashboard", label: "Dashboard", icon: "▦" },
-  { key: "new-analysis", label: "New Analysis", icon: "＋" },
-  { key: "result", label: "Analysis Result", icon: "◉" },
-  { key: "history", label: "History", icon: "≡" },
-  { key: "reports", label: "Reports", icon: "↗" },
-  { key: "ai-chat", label: "AI Chat", icon: "✦" },
-  { key: "settings", label: "Settings", icon: "⚙" },
+  { to: "/dashboard", label: "Dashboard", icon: "▦" },
+  { to: "/new", label: "New Analysis", icon: "＋" },
+  { to: "/result", label: "Analysis Result", icon: "◉" },
+  { to: "/history", label: "History", icon: "≡" },
+  { to: "/reports", label: "Reports", icon: "↗" },
+  { to: "/ai-chat", label: "AI Chat", icon: "✦" },
+  { to: "/settings", label: "Settings", icon: "⚙" },
 ];
 
 interface Props {
-  current: PageKey;
-  onNavigate: (page: PageKey) => void;
   onLogout: () => void;
 }
 
-export default function Sidebar({ current, onNavigate, onLogout }: Props) {
+export default function Sidebar({ onLogout }: Props) {
   return (
     <aside className="sidebar" aria-label="Primary navigation">
       <div className="sidebar-brand">
@@ -43,23 +34,20 @@ export default function Sidebar({ current, onNavigate, onLogout }: Props) {
       </div>
 
       <nav className="sidebar-nav">
-        {NAV.map((item) => {
-          const active = current === item.key;
-          return (
-            <button
-              key={item.key}
-              type="button"
-              className={`sidebar-item ${active ? "active" : ""}`}
-              onClick={() => onNavigate(item.key)}
-              aria-current={active ? "page" : undefined}
-            >
-              <span className="sidebar-item-icon" aria-hidden>
-                {item.icon}
-              </span>
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
+        {NAV.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              `sidebar-item ${isActive ? "active" : ""}`
+            }
+          >
+            <span className="sidebar-item-icon" aria-hidden>
+              {item.icon}
+            </span>
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
       </nav>
 
       <div className="sidebar-footer">

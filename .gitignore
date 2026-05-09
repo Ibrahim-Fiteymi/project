@@ -1,6 +1,39 @@
-node_modules/
-__pycache__/
-.venv/
+# --- Secrets ---
 .env
-outputs/
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# --- Virtual environments ---
+.venv/
+venv/
+
+# --- Node / Vite ---
+node_modules/
 frontend/dist/
+*.tsbuildinfo
+
+# --- Build / outputs ---
+outputs/
+backend/storage/
+*.db
+*.sqlite
+*.sqlite3
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,13 +1,14 @@
+import { useNavigate } from "react-router-dom";
 import type { AnalysisResponse } from "../api";
 import ResultViewer from "../components/ResultViewer";
-import type { PageKey } from "../layout/Sidebar";
 
 interface Props {
   result: AnalysisResponse | null;
-  onNavigate: (page: PageKey) => void;
 }
 
-export default function AnalysisResult({ result, onNavigate }: Props) {
+export default function AnalysisResult({ result }: Props) {
+  const navigate = useNavigate();
+
   if (!result) {
     return (
       <div className="page">
@@ -19,7 +20,7 @@ export default function AnalysisResult({ result, onNavigate }: Props) {
           <button
             type="button"
             className="btn"
-            onClick={() => onNavigate("new-analysis")}
+            onClick={() => navigate("/new")}
           >
             Go to New Analysis
           </button>
@@ -51,18 +52,10 @@ export default function AnalysisResult({ result, onNavigate }: Props) {
           <p className="panel-sub">Re-run with a different image or export this result.</p>
         </div>
         <div className="inline-actions-buttons">
-          <button
-            type="button"
-            className="btn"
-            onClick={() => onNavigate("new-analysis")}
-          >
+          <button type="button" className="btn" onClick={() => navigate("/new")}>
             New analysis
           </button>
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={() => onNavigate("reports")}
-          >
+          <button type="button" className="btn-ghost" onClick={() => navigate("/reports")}>
             Export
           </button>
         </div>

@@ -1,24 +1,39 @@
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { HealthResponse } from "../api";
 import MetricCard from "../components/MetricCard";
-import { getHistory } from "../lib/historyStore";
-import type { PageKey } from "../layout/Sidebar";
+import { fetchHistory, type HistoryEntry } from "../lib/historyStore";
 
 interface Props {
   health: HealthResponse | null;
-  onNavigate: (page: PageKey) => void;
 }
 
-export default function Dashboard({ health, onNavigate }: Props) {
-  const history = useMemo(() => getHistory(), []);
+export default function Dashboard({ health }: Props) {
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const entries = await fetchHistory();
+        if (!cancelled) setHistory(entries);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const total = history.length;
-  const completed = history.length;
+  const completed = history.filter((h) => h.raw.status === "completed").length;
   const avg =
     history.length === 0
       ? "—"
-      : Math.round(
-          history.reduce((s, h) => s + h.cellCount, 0) / history.length
-        ).toString();
+      : Math.round(history.reduce((s, h) => s + h.cellCount, 0) / history.length).toString();
 
   let modelStatus = "Offline";
   let modelTone: "model" | "fallback" = "fallback";
@@ -40,13 +55,13 @@ export default function Dashboard({ health, onNavigate }: Props) {
       <section className="kpi-grid">
         <MetricCard
           label="Total analyses"
-          value={total}
+          value={loading ? "…" : total}
           caption={total === 0 ? "No data yet — run your first analysis" : "All sessions"}
         />
         <MetricCard
           label="Completed"
-          value={completed}
-          caption={completed === 0 ? "—" : "All entries completed successfully"}
+          value={loading ? "…" : completed}
+          caption={completed === 0 ? "—" : "Successful runs only"}
         />
         <MetricCard
           label="Avg cell count"
@@ -67,21 +82,13 @@ export default function Dashboard({ health, onNavigate }: Props) {
           <p className="panel-sub">Jump back into the workflow.</p>
         </div>
         <div className="quick-actions">
-          <button type="button" className="btn" onClick={() => onNavigate("new-analysis")}>
+          <button type="button" className="btn" onClick={() => navigate("/new")}>
             Start a new analysis
           </button>
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={() => onNavigate("history")}
-          >
+          <button type="button" className="btn-ghost" onClick={() => navigate("/history")}>
             View history
           </button>
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={() => onNavigate("reports")}
-          >
+          <button type="button" className="btn-ghost" onClick={() => navigate("/reports")}>
             Open reports
           </button>
         </div>
@@ -91,15 +98,17 @@ export default function Dashboard({ health, onNavigate }: Props) {
         <div className="panel-head">
           <h2 className="panel-title">Recent activity</h2>
           <p className="panel-sub">
-            {history.length === 0
-              ? "No runs yet — analyses will appear here as you create them."
-              : `Showing the ${Math.min(5, history.length)} most recent run(s).`}
+            {loading
+              ? "Loading…"
+              : history.length === 0
+                ? "No runs yet — analyses will appear here as you create them."
+                : `Showing the ${Math.min(5, history.length)} most recent run(s).`}
           </p>
         </div>
-        {history.length === 0 ? (
+        {!loading && history.length === 0 ? (
           <div className="empty-state">
             <p>Your dashboard is empty.</p>
-            <button type="button" className="btn" onClick={() => onNavigate("new-analysis")}>
+            <button type="button" className="btn" onClick={() => navigate("/new")}>
               Run your first analysis
             </button>
           </div>

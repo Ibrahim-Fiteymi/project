@@ -31,10 +31,10 @@ BATCH_SIZE = 1
 NUM_WORKERS = 0
 
 THRESHOLDS = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-MIN_AREA = 1
+MIN_AREA = 5
 
 
-def count_nuclei(binary_mask: np.ndarray, min_area: int = 1) -> int:
+def count_nuclei(binary_mask: np.ndarray, min_area: int = 5) -> int:
     binary_mask = binary_mask.astype("uint8")
 
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(

@@ -1,17 +1,29 @@
 import { useState, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
-interface Props {
-  onSignIn: (email: string) => void;
-}
+import { useAuth } from "../lib/AuthContext";
 
-export default function Login({ onSignIn }: Props) {
-  const [email, setEmail] = useState("demo@nuclei.ai");
-  const [password, setPassword] = useState("demo");
+export default function Login() {
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!email.trim()) return;
-    onSignIn(email.trim());
+    if (!email.trim() || !password) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await login(email.trim(), password);
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -29,7 +41,7 @@ export default function Login({ onSignIn }: Props) {
 
         <h2 className="login-title">Sign in to your workspace</h2>
         <p className="login-subtitle">
-          Visual demo only — no real authentication is performed. Any email will work.
+          Email and password authentication. Sessions are protected with JWTs.
         </p>
 
         <form onSubmit={handleSubmit} className="login-form">
@@ -51,17 +63,25 @@ export default function Login({ onSignIn }: Props) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
+              required
             />
           </label>
 
-          <button type="submit" className="btn login-btn">
-            Sign in
+          {error && (
+            <div className="alert" role="alert">
+              {error}
+            </div>
+          )}
+
+          <button type="submit" className="btn login-btn" disabled={busy}>
+            {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>
 
         <div className="login-foot">
-          <span className="tag">Demo mode</span>
-          <span className="metric-caption">No password is checked.</span>
+          <span className="metric-caption">
+            Need an account? <Link to="/register">Create one</Link>
+          </span>
         </div>
       </div>
     </div>

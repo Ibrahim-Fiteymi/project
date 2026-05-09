@@ -1,11 +1,9 @@
 import type { ReactNode } from "react";
 import type { HealthResponse } from "../api";
-import Sidebar, { type PageKey } from "./Sidebar";
+import Sidebar from "./Sidebar";
 import TopHeader from "./TopHeader";
 
 interface Props {
-  currentPage: PageKey;
-  onNavigate: (page: PageKey) => void;
   onLogout: () => void;
   health: HealthResponse | null;
   userEmail: string | null;
@@ -13,8 +11,6 @@ interface Props {
 }
 
 export default function DashboardLayout({
-  currentPage,
-  onNavigate,
   onLogout,
   health,
   userEmail,
@@ -22,9 +18,9 @@ export default function DashboardLayout({
 }: Props) {
   return (
     <div className="layout">
-      <Sidebar current={currentPage} onNavigate={onNavigate} onLogout={onLogout} />
+      <Sidebar onLogout={onLogout} />
       <div className="layout-main">
-        <TopHeader page={currentPage} health={health} userEmail={userEmail} />
+        <TopHeader health={health} userEmail={userEmail} />
         <main className="layout-content">{children}</main>
       </div>
     </div>

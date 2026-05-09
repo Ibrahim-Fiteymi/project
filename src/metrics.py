@@ -22,10 +22,18 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 IMAGE_SIZE = 256
 BATCH_SIZE = 1
 NUM_WORKERS = 0
-THRESHOLD = 0.5
+
+# Operating threshold matches the deployed inference path (selected via
+# tune_threshold_xmlgt by lowest counting MAE on the validation set).
+# Keep this in sync with backend/config.py:settings.threshold.
+try:
+    from backend.config import settings as _settings
+    THRESHOLD = float(_settings.threshold)
+except Exception:
+    THRESHOLD = 0.7
 
 
-def dice_score(logits, targets, threshold=0.5, smooth=1.0):
+def dice_score(logits, targets, threshold=0.7, smooth=1.0):
     probs = torch.sigmoid(logits)
     preds = (probs > threshold).float()
 
@@ -40,7 +48,7 @@ def dice_score(logits, targets, threshold=0.5, smooth=1.0):
     return dice.mean().item()
 
 
-def iou_score(logits, targets, threshold=0.5, smooth=1.0):
+def iou_score(logits, targets, threshold=0.7, smooth=1.0):
     probs = torch.sigmoid(logits)
     preds = (probs > threshold).float()
 

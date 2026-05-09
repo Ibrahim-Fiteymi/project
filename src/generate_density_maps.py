@@ -14,7 +14,7 @@ OUTPUT_DIR = ROOT / "outputs" / "density_maps"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 GRID_SIZE = 8
-MIN_AREA = 1
+MIN_AREA = 5
 
 
 def find_image_path(image_name: str, df: pd.DataFrame) -> Path | None:

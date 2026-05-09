@@ -1,20 +1,33 @@
-import { useEffect, useState } from "react";
+/**
+ * Top-level router and auth gate.
+ *
+ * Auth state is owned by AuthProvider (lib/AuthContext). Routes that should
+ * only render for signed-in users are wrapped in <ProtectedRoute>. The /login
+ * and /register pages are public; everything else lives under the dashboard
+ * layout and requires a session.
+ */
+
+import { useCallback, useEffect, useState } from "react";
+import { Navigate, Route, Routes } from "react-router-dom";
+
 import { getHealth, type AnalysisResponse, type HealthResponse } from "./api";
+import ErrorBoundary from "./components/ErrorBoundary";
+import ProtectedRoute from "./components/ProtectedRoute";
 import DashboardLayout from "./layout/DashboardLayout";
-import type { PageKey } from "./layout/Sidebar";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import NewAnalysis from "./pages/NewAnalysis";
-import AnalysisResult from "./pages/AnalysisResult";
+import { useAuth } from "./lib/AuthContext";
+import AiChat from "./pages/AiChat";
 import AnalysisHistory from "./pages/AnalysisHistory";
+import AnalysisResult from "./pages/AnalysisResult";
+import Dashboard from "./pages/Dashboard";
+import Login from "./pages/Login";
+import NewAnalysis from "./pages/NewAnalysis";
+import NotFound from "./pages/NotFound";
+import Register from "./pages/Register";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
-import AiChat from "./pages/AiChat";
 
 export default function App() {
-  const [signedIn, setSignedIn] = useState(false);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState<PageKey>("dashboard");
+  const { user, isAuthenticated, logout } = useAuth();
   const [latestResult, setLatestResult] = useState<AnalysisResponse | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
 
@@ -24,69 +37,60 @@ export default function App() {
       .catch(() => setHealth(null));
   }, []);
 
-  function handleSignIn(email: string) {
-    setUserEmail(email);
-    setSignedIn(true);
-    setCurrentPage("dashboard");
-  }
-
-  function handleLogout() {
-    setSignedIn(false);
-    setUserEmail(null);
-  }
-
-  function handleAnalysisComplete(r: AnalysisResponse) {
-    setLatestResult(r);
-  }
-
-  if (!signedIn) {
-    return <Login onSignIn={handleSignIn} />;
-  }
-
-  let pageNode;
-  switch (currentPage) {
-    case "dashboard":
-      pageNode = <Dashboard health={health} onNavigate={setCurrentPage} />;
-      break;
-    case "new-analysis":
-      pageNode = (
-        <NewAnalysis
-          onAnalysisComplete={handleAnalysisComplete}
-          onNavigate={setCurrentPage}
-        />
-      );
-      break;
-    case "result":
-      pageNode = <AnalysisResult result={latestResult} onNavigate={setCurrentPage} />;
-      break;
-    case "history":
-      pageNode = (
-        <AnalysisHistory
-          onSelectResult={setLatestResult}
-          onNavigate={setCurrentPage}
-        />
-      );
-      break;
-    case "reports":
-      pageNode = <Reports />;
-      break;
-    case "settings":
-      pageNode = <Settings userEmail={userEmail} health={health} />;
-      break;
-    case "ai-chat":
-      pageNode = <AiChat />;
-      break;
-  }
+  const handleLogout = useCallback(async () => {
+    await logout();
+  }, [logout]);
 
   return (
-    <DashboardLayout
-      currentPage={currentPage}
-      onNavigate={setCurrentPage}
-      onLogout={handleLogout}
-      health={health}
-      userEmail={userEmail}
-    >
-      {pageNode}
-    </DashboardLayout>
+    <Routes>
+      <Route
+        path="/login"
+        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}
+      />
+      <Route
+        path="/register"
+        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />}
+      />
+      <Route
+        path="/*"
+        element={
+          <ProtectedRoute>
+            <ErrorBoundary>
+              <DashboardLayout
+                onLogout={handleLogout}
+                health={health}
+                userEmail={user?.email ?? ""}
+              >
+                <Routes>
+                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="/dashboard" element={<Dashboard health={health} />} />
+                  <Route
+                    path="/new"
+                    element={<NewAnalysis onAnalysisComplete={setLatestResult} />}
+                  />
+                  <Route
+                    path="/result"
+                    element={<AnalysisResult result={latestResult} />}
+                  />
+                  <Route
+                    path="/history"
+                    element={<AnalysisHistory onSelectResult={setLatestResult} />}
+                  />
+                  <Route path="/reports" element={<Reports />} />
+                  <Route path="/ai-chat" element={<AiChat />} />
+                  <Route
+                    path="/settings"
+                    element={
+                      <Settings userEmail={user?.email ?? ""} health={health} />
+                    }
+                  />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </DashboardLayout>
+            </ErrorBoundary>
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
   );
 }

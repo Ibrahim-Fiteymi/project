@@ -1,58 +1,77 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { AnalysisResponse } from "../api";
-import { clearHistory, getHistory, type HistoryEntry } from "../lib/historyStore";
-import type { PageKey } from "../layout/Sidebar";
+import { fileUrl } from "../api";
+import { fetchHistory, removeAnalysis, type HistoryEntry } from "../lib/historyStore";
 
 interface Props {
   onSelectResult: (r: AnalysisResponse) => void;
-  onNavigate: (page: PageKey) => void;
 }
 
-const PLACEHOLDER: HistoryEntry[] = [
-  {
-    id: "demo-001",
-    timestamp: Date.now() - 1000 * 60 * 60 * 24,
-    filename: "sample_001.png",
-    cellCount: 142,
-    mode: "model",
-    device: "cpu",
-    processingMs: 1820,
-    result: null as unknown as AnalysisResponse,
-  },
-  {
-    id: "demo-002",
-    timestamp: Date.now() - 1000 * 60 * 60 * 26,
-    filename: "sample_002.png",
-    cellCount: 87,
-    mode: "model",
-    device: "cpu",
-    processingMs: 1640,
-    result: null as unknown as AnalysisResponse,
-  },
-  {
-    id: "demo-003",
-    timestamp: Date.now() - 1000 * 60 * 60 * 48,
-    filename: "sample_003.jpg",
-    cellCount: 211,
-    mode: "fallback-demo",
-    device: "cpu",
-    processingMs: 980,
-    result: null as unknown as AnalysisResponse,
-  },
-];
+function entryToResult(entry: HistoryEntry): AnalysisResponse | null {
+  if (entry.result) return entry.result;
+  const r = entry.raw;
+  if (!r.input_url || !r.mask_url || !r.overlay_url) return null;
+  return {
+    job_id: r.job_id,
+    status: r.status,
+    message: "Loaded from history",
+    cell_count: r.cell_count ?? 0,
+    input_url: r.input_url,
+    mask_url: r.mask_url,
+    overlay_url: r.overlay_url,
+    metadata: {
+      original_filename: r.original_filename ?? `${r.job_id}.png`,
+      mode: r.mode ?? "unknown",
+      threshold: r.threshold,
+      min_area: r.min_area ?? 0,
+      image_size: 256,
+      processing_ms: r.processing_ms ?? 0,
+      device: "—",
+    },
+  };
+}
 
-export default function AnalysisHistory({ onSelectResult, onNavigate }: Props) {
-  const [tick, setTick] = useState(0);
-  const history = useMemo(() => getHistory(), [tick]);
-  const isEmpty = history.length === 0;
-  const rows = isEmpty ? PLACEHOLDER : history;
+export default function AnalysisHistory({ onSelectResult }: Props) {
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
-  function handleClear() {
-    if (confirm("Clear all history entries from this browser?")) {
-      clearHistory();
-      setTick((t) => t + 1);
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setHistory(await fetchHistory());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const isEmpty = !loading && history.length === 0;
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this analysis permanently?")) return;
+    try {
+      await removeAnalysis(id);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     }
   }
+
+  const sub = useMemo(() => {
+    if (loading) return "Loading from server…";
+    if (error) return error;
+    if (isEmpty) return "No analyses yet — your runs will appear here.";
+    return `${history.length} entr${history.length === 1 ? "y" : "ies"} on the server.`;
+  }, [loading, error, isEmpty, history.length]);
 
   return (
     <div className="page">
@@ -60,25 +79,20 @@ export default function AnalysisHistory({ onSelectResult, onNavigate }: Props) {
         <div className="panel-head panel-head-row">
           <div>
             <h2 className="panel-title">Recent analyses</h2>
-            <p className="panel-sub">
-              {isEmpty
-                ? "Showing placeholder data — your real analyses will appear here once you run them."
-                : `${history.length} entr${history.length === 1 ? "y" : "ies"} stored locally.`}
-            </p>
+            <p className="panel-sub">{sub}</p>
           </div>
           <div className="inline-actions-buttons">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => onNavigate("new-analysis")}
-            >
+            <button type="button" className="btn" onClick={() => navigate("/new")}>
               New analysis
             </button>
-            {!isEmpty && (
-              <button type="button" className="btn-ghost" onClick={handleClear}>
-                Clear history
-              </button>
-            )}
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={refresh}
+              disabled={loading}
+            >
+              {loading ? "Refreshing…" : "Refresh"}
+            </button>
           </div>
         </div>
 
@@ -91,11 +105,12 @@ export default function AnalysisHistory({ onSelectResult, onNavigate }: Props) {
                 <th>Cells</th>
                 <th>Mode</th>
                 <th>Time</th>
+                <th>Preview</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {history.map((row) => (
                 <tr key={row.id}>
                   <td>{new Date(row.timestamp).toLocaleString()}</td>
                   <td className="mono">{row.filename}</td>
@@ -109,22 +124,47 @@ export default function AnalysisHistory({ onSelectResult, onNavigate }: Props) {
                   </td>
                   <td className="num">{row.processingMs} ms</td>
                   <td>
+                    {row.raw.overlay_url ? (
+                      <img
+                        src={fileUrl(row.raw.overlay_url)}
+                        alt="overlay"
+                        className="history-thumb"
+                      />
+                    ) : (
+                      <span className="metric-caption">—</span>
+                    )}
+                  </td>
+                  <td>
                     <button
                       type="button"
                       className="btn-link"
-                      disabled={isEmpty}
                       onClick={() => {
-                        if (!isEmpty && row.result) {
-                          onSelectResult(row.result);
-                          onNavigate("result");
+                        const result = entryToResult(row);
+                        if (result) {
+                          onSelectResult(result);
+                          navigate("/result");
                         }
                       }}
                     >
                       View
                     </button>
+                    <button
+                      type="button"
+                      className="btn-link danger"
+                      onClick={() => handleDelete(row.id)}
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}
+              {isEmpty && (
+                <tr>
+                  <td colSpan={7} className="empty-row">
+                    No runs yet — start a new analysis to populate this list.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

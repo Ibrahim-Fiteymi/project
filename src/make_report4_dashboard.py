@@ -254,11 +254,11 @@ def main():
         </p>
 
         <div class="note">
-            Corrected baseline used for Report 4:
-            <b>Threshold = 0.8</b>,
-            <b>MIN_AREA = 1 for counting</b>,
+            Selected baseline used for Report 4:
+            <b>Threshold = 0.7</b>,
+            <b>MIN_AREA = 5 for counting</b>,
             and <b>XML-based ground-truth counts</b>.
-            Morphology uses <b>MIN_AREA = 5</b> only to make shape measurements more stable.
+            Morphology also uses <b>MIN_AREA = 5</b> for stable shape measurements.
         </div>
     </div>
 

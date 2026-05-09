@@ -1,23 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { analyzeImage, type AnalysisResponse } from "../api";
 import UploadPanel from "../components/UploadPanel";
 import ResultViewer from "../components/ResultViewer";
 import WorkflowSteps, { type WorkflowStage } from "../components/WorkflowSteps";
-import { addAnalysis } from "../lib/historyStore";
-import type { PageKey } from "../layout/Sidebar";
+import DemoStrip from "../components/DemoStrip";
+import { cacheLocal } from "../lib/historyStore";
 
 interface Props {
   onAnalysisComplete: (r: AnalysisResponse) => void;
-  onNavigate: (page: PageKey) => void;
 }
 
-export default function NewAnalysis({ onAnalysisComplete, onNavigate }: Props) {
+export default function NewAnalysis({ onAnalysisComplete }: Props) {
   const [stage, setStage] = useState<WorkflowStage>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!file) {
@@ -29,6 +31,13 @@ export default function NewAnalysis({ onAnalysisComplete, onNavigate }: Props) {
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
+  // Abort any in-flight analysis when the component unmounts.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   function handleFileSelected(f: File) {
     setFile(f);
     setResult(null);
@@ -38,21 +47,27 @@ export default function NewAnalysis({ onAnalysisComplete, onNavigate }: Props) {
 
   async function handleAnalyze() {
     if (!file) return;
+    // Cancel any prior in-flight request before starting a new one.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setBusy(true);
     setError(null);
     setResult(null);
     setStage("segment");
     try {
-      const r = await analyzeImage(file);
+      const r = await analyzeImage(file, controller.signal);
       setStage("count");
       setResult(r);
       setStage("report");
-      addAnalysis(r);
+      cacheLocal(r);
       onAnalysisComplete(r);
     } catch (e) {
+      if ((e as { name?: string })?.name === "AbortError") return;
       setError(e instanceof Error ? e.message : String(e));
       setStage("upload");
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
       setBusy(false);
     }
   }
@@ -62,6 +77,8 @@ export default function NewAnalysis({ onAnalysisComplete, onNavigate }: Props) {
       <section className="panel">
         <WorkflowSteps stage={stage} />
       </section>
+
+      <DemoStrip onSelect={handleFileSelected} />
 
       <section className="grid-2">
         <UploadPanel
@@ -84,18 +101,10 @@ export default function NewAnalysis({ onAnalysisComplete, onNavigate }: Props) {
             </p>
           </div>
           <div className="inline-actions-buttons">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => onNavigate("result")}
-            >
+            <button type="button" className="btn" onClick={() => navigate("/result")}>
               View full result →
             </button>
-            <button
-              type="button"
-              className="btn-ghost"
-              onClick={() => onNavigate("history")}
-            >
+            <button type="button" className="btn-ghost" onClick={() => navigate("/history")}>
               See history
             </button>
           </div>

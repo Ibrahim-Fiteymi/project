@@ -40,13 +40,22 @@ class Settings(BaseSettings):
         ]
     )
 
-    # --- Database (Phase 1 step 2+; unused today) ---
+    # --- Database ---
     database_url: Optional[str] = None
 
-    # --- JWT (Phase 1 step 3+; unused today) ---
+    # --- JWT / authentication ---
+    # In production, jwt_secret MUST be set via env. In dev a stable per-machine
+    # fallback is generated at process start so tokens survive reload but are
+    # never the literal "change-me" placeholder.
     jwt_secret: Optional[str] = None
     jwt_alg: str = "HS256"
+    # Legacy single TTL — kept for back-compat. New code uses the two below.
     jwt_ttl_seconds: int = 3600
+    # Access tokens: short-lived, sent on every request.
+    jwt_access_ttl_seconds: int = 900           # 15 minutes
+    # Refresh tokens: long-lived, stored hashed in DB so they can be revoked.
+    jwt_refresh_ttl_seconds: int = 60 * 60 * 24 * 30  # 30 days
+    password_min_length: int = 8
 
     # --- Storage ---
     storage_root: str = str(ROOT / "backend" / "storage")
@@ -54,11 +63,11 @@ class Settings(BaseSettings):
     # --- AI / inference ---
     model_checkpoint: str = str(ROOT / "outputs" / "checkpoints" / "best_model.pth")
     image_size: int = 256          # tied to the trained U-Net; not a user knob
-    threshold: float = 0.8         # corrected operating point (batch_count_refined)
-    min_area: int = 1
+    threshold: float = 0.7         # selected operating point (lowest counting MAE)
+    min_area: int = 5              # noise-filter for connected-components counting
 
     # --- Upload limits ---
-    max_upload_bytes: int = 25 * 1024 * 1024  # 25 MB
+    max_upload_bytes: int = 50 * 1024 * 1024  # 50 MB
 
     # --- Rate limits (Phase 2; unused today) ---
     rate_limit_login_per_minute: int = 10

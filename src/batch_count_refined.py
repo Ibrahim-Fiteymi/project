@@ -36,12 +36,12 @@ IMAGE_SIZE = 256
 BATCH_SIZE = 1
 NUM_WORKERS = 0
 
-# Corrected operating point from XML-based threshold tuning
-THRESHOLD = 0.8
-MIN_AREA = 1
+# Selected operating point from XML-based threshold tuning (lowest counting MAE)
+THRESHOLD = 0.7
+MIN_AREA = 5
 
 
-def count_nuclei_from_binary(binary_mask: np.ndarray, min_area: int = 1) -> int:
+def count_nuclei_from_binary(binary_mask: np.ndarray, min_area: int = 5) -> int:
     binary_mask = binary_mask.astype("uint8")
 
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(

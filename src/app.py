@@ -82,8 +82,8 @@ def main():
     )
 
     st.info(
-        "Corrected baseline: Threshold = 0.8, MIN_AREA = 1 for counting, "
-        "XML-based ground truth. Morphology uses MIN_AREA = 5 for stable shape measurements."
+        "Selected baseline: Threshold = 0.7, MIN_AREA = 5 for counting, "
+        "XML-based ground truth. Morphology also uses MIN_AREA = 5 for stable shape measurements."
     )
 
     count_df = load_csv(COUNT_RESULTS)
