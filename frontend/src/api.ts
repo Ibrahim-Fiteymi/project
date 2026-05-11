@@ -143,3 +143,94 @@ export function fileUrl(relative: string | null | undefined): string {
   if (!relative) return "";
   return `${API_BASE}${relative}`;
 }
+
+// ---------------------------------------------------------------------------
+// Admin API (gated server-side by users:read / users:update / audit_logs:read)
+// ---------------------------------------------------------------------------
+
+export interface AdminUser {
+  id: number;
+  email: string;
+  role: string;
+  is_active: boolean;
+  last_login_at: string | null;
+  created_at: string;
+}
+
+export interface AdminUserList {
+  items: AdminUser[];
+  total: number;
+}
+
+export interface AuditLogEntry {
+  id: number;
+  actor_user_id: number | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  ip: string | null;
+  user_agent: string | null;
+  extra: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AuditLogList {
+  items: AuditLogEntry[];
+  total: number;
+}
+
+export async function adminListUsers(
+  limit = 50,
+  offset = 0,
+  signal?: AbortSignal,
+): Promise<AdminUserList> {
+  const res = await authedFetch(
+    `${API_BASE}/admin/users?limit=${limit}&offset=${offset}`,
+    { signal },
+  );
+  if (!res.ok) throw new Error(await parseError(res, `Admin user list failed (${res.status})`));
+  return res.json();
+}
+
+export async function adminChangeUserRole(
+  userId: number,
+  role: string,
+  signal?: AbortSignal,
+): Promise<AdminUser> {
+  const res = await authedFetch(`${API_BASE}/admin/users/${userId}/role`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role }),
+    signal,
+  });
+  if (!res.ok) throw new Error(await parseError(res, `Role change failed (${res.status})`));
+  return res.json();
+}
+
+export async function adminChangeUserActive(
+  userId: number,
+  isActive: boolean,
+  signal?: AbortSignal,
+): Promise<AdminUser> {
+  const res = await authedFetch(`${API_BASE}/admin/users/${userId}/active`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ is_active: isActive }),
+    signal,
+  });
+  if (!res.ok) throw new Error(await parseError(res, `Active toggle failed (${res.status})`));
+  return res.json();
+}
+
+export async function adminListAuditLogs(
+  limit = 100,
+  offset = 0,
+  signal?: AbortSignal,
+): Promise<AuditLogList> {
+  const res = await authedFetch(
+    `${API_BASE}/admin/audit-logs?limit=${limit}&offset=${offset}`,
+    { signal },
+  );
+  if (!res.ok) throw new Error(await parseError(res, `Audit log fetch failed (${res.status})`));
+  return res.json();
+}

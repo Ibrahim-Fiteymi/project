@@ -19,20 +19,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlmodel import Session
 
-from backend.auth.dependencies import get_current_user
+from backend.auth.dependencies import require_permission
+from backend.auth.permissions import Permission, has_permission
 from backend.auth.router import router as auth_router
 from backend.config import settings
 from backend.db import get_session, init_db
 from backend.db.models import User
 from backend.logging_config import setup_logging
 from backend.rate_limit import IPRateLimiter
+from backend.routers.admin import router as admin_router
 from backend.schemas import (
     AnalysisHistoryItem,
     AnalysisHistoryResponse,
     AnalysisResponse,
     HealthResponse,
 )
-from backend.services import analysis_service
+from backend.services import analysis_service, audit_service
 
 setup_logging()
 log = logging.getLogger(__name__)
@@ -74,6 +76,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(admin_router)
 
 
 @app.middleware("http")
@@ -135,7 +138,7 @@ async def analyze(
     request: Request,
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(Permission.ANALYSIS_CREATE)),
 ) -> AnalysisResponse:
     upload_limiter.check(request)
     _validate_upload(file)
@@ -169,7 +172,7 @@ def list_analyses(
     limit: int = 50,
     offset: int = 0,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(Permission.ANALYSIS_READ_OWN)),
 ) -> AnalysisHistoryResponse:
     if limit < 1 or limit > 200:
         raise HTTPException(status_code=400, detail="limit must be between 1 and 200.")
@@ -188,7 +191,7 @@ def list_analyses(
 def get_analysis(
     job_id: str,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(Permission.ANALYSIS_READ_OWN)),
 ) -> AnalysisHistoryItem:
     item = analysis_service.get_history_item(
         session, job_id, owner_id=current_user.id, role=current_user.role
@@ -201,8 +204,9 @@ def get_analysis(
 @app.delete("/api/analyses/{job_id}")
 def delete_analysis(
     job_id: str,
+    request: Request,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(Permission.ANALYSIS_DELETE_OWN)),
 ):
     from backend.db import repositories
 
@@ -210,10 +214,21 @@ def delete_analysis(
     if found is None:
         raise HTTPException(status_code=404, detail="Analysis not found.")
     job, _ = found
-    if current_user.role != "admin" and job.owner_id != current_user.id:
+    is_owner = job.owner_id == current_user.id
+    if not is_owner and not has_permission(current_user.role, Permission.ANALYSIS_DELETE_ALL):
+        # Hide existence to non-owners without delete_all.
         raise HTTPException(status_code=404, detail="Analysis not found.")
     if not repositories.delete_job(session, job_id):
         raise HTTPException(status_code=404, detail="Analysis not found.")
+    audit_service.record(
+        session,
+        actor_user_id=current_user.id,
+        action="analysis.delete",
+        target_type="analysis_job",
+        target_id=job_id,
+        request=request,
+        extra={"owner_id": job.owner_id, "by_owner": is_owner},
+    )
     return {"deleted": job_id}
 
 

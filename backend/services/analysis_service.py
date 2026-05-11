@@ -294,6 +294,14 @@ def _job_to_history_item(job, result) -> dict:
     }
 
 
+def _can_read_all(role: Optional[str]) -> bool:
+    # Late import — keeps the analysis service from depending on auth at module
+    # import time, which would create a cycle in tests that instantiate the
+    # service without booting the app.
+    from backend.auth.permissions import Permission, has_permission
+    return has_permission(role, Permission.ANALYSIS_READ_ALL)
+
+
 def list_history(
     session: Session,
     *,
@@ -302,8 +310,9 @@ def list_history(
     owner_id: Optional[int] = None,
     role: Optional[str] = None,
 ) -> dict:
-    # Admins see everything; everyone else only their own jobs.
-    scope_owner = None if role == "admin" else owner_id
+    # Callers with analysis:read_all see every job; everyone else is scoped to
+    # their own owner_id.
+    scope_owner = None if _can_read_all(role) else owner_id
     rows = repositories.list_jobs(
         session, limit=limit, offset=offset, owner_id=scope_owner
     )
@@ -322,7 +331,11 @@ def get_history_item(
     if found is None:
         return None
     job, result = found
-    if role != "admin" and owner_id is not None and job.owner_id != owner_id:
+    if (
+        not _can_read_all(role)
+        and owner_id is not None
+        and job.owner_id != owner_id
+    ):
         return None
     return _job_to_history_item(job, result)
 

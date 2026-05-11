@@ -1,5 +1,8 @@
 import { NavLink } from "react-router-dom";
 
+import { useAuth } from "../lib/AuthContext";
+import { isAdminRole } from "../lib/permissions";
+
 interface NavItem {
   to: string;
   label: string;
@@ -16,11 +19,16 @@ const NAV: NavItem[] = [
   { to: "/settings", label: "Settings", icon: "⚙" },
 ];
 
+const ADMIN_NAV: NavItem = { to: "/admin", label: "Admin", icon: "✦" };
+
 interface Props {
   onLogout: () => void;
 }
 
 export default function Sidebar({ onLogout }: Props) {
+  const { user } = useAuth();
+  const showAdmin = isAdminRole(user?.role);
+  const items = showAdmin ? [...NAV, ADMIN_NAV] : NAV;
   return (
     <aside className="sidebar" aria-label="Primary navigation">
       <div className="sidebar-brand">
@@ -34,7 +42,7 @@ export default function Sidebar({ onLogout }: Props) {
       </div>
 
       <nav className="sidebar-nav">
-        {NAV.map((item) => (
+        {items.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

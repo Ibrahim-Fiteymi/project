@@ -74,33 +74,49 @@ def client(_isolated_storage):
         yield c
 
 
-@pytest.fixture()
-def admin_client(_isolated_storage):
-    """A TestClient authenticated as an admin user (registers, then promotes)."""
+def _promote_and_login(c, email: str, password: str, role: str) -> None:
     from backend.db import get_session
     from backend.db import repositories_auth
 
+    gen = get_session()
+    session = next(gen)
+    try:
+        user = repositories_auth.get_user_by_email(session, email)
+        assert user is not None
+        user.role = role
+        session.add(user)
+        session.commit()
+    finally:
+        try:
+            next(gen)
+        except StopIteration:
+            pass
+    re = c.post("/auth/login", json={"email": email, "password": password})
+    assert re.status_code == 200, re.text
+    c.headers.update({"Authorization": f"Bearer {re.json()['access_token']}"})
+
+
+@pytest.fixture()
+def admin_client(_isolated_storage):
+    """A TestClient authenticated as an `admin`-role user."""
     with _boot_app() as c:
         email = f"admin-{uuid.uuid4().hex[:8]}@example.com"
-        res = c.post("/auth/register", json={"email": email, "password": "admin-pw-1234"})
+        password = "admin-pw-1234"
+        res = c.post("/auth/register", json={"email": email, "password": password})
         assert res.status_code == 201, res.text
-        # Promote in DB then re-login to mint an admin-role token.
-        gen = get_session()
-        session = next(gen)
-        try:
-            user = repositories_auth.get_user_by_email(session, email)
-            assert user is not None
-            user.role = "admin"
-            session.add(user)
-            session.commit()
-        finally:
-            try:
-                next(gen)
-            except StopIteration:
-                pass
-        re = c.post("/auth/login", json={"email": email, "password": "admin-pw-1234"})
-        assert re.status_code == 200, re.text
-        c.headers.update({"Authorization": f"Bearer {re.json()['access_token']}"})
+        _promote_and_login(c, email, password, "admin")
+        yield c
+
+
+@pytest.fixture()
+def superadmin_client(_isolated_storage):
+    """A TestClient authenticated as a `superadmin` (roles:manage)."""
+    with _boot_app() as c:
+        email = f"super-{uuid.uuid4().hex[:8]}@example.com"
+        password = "super-pw-12345"
+        res = c.post("/auth/register", json={"email": email, "password": password})
+        assert res.status_code == 201, res.text
+        _promote_and_login(c, email, password, "superadmin")
         yield c
 
 

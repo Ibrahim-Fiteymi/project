@@ -5,6 +5,8 @@ from backend.db.models.project import Project
 from backend.db.models.analysis_job import AnalysisJob, JobStatus
 from backend.db.models.analysis_result import AnalysisResult
 from backend.db.models.refresh_token import RefreshToken
+from backend.db.models.role import Permission as PermissionRecord, Role, RolePermission
+from backend.db.models.audit_log import AuditLog
 
 __all__ = [
     "User",
@@ -13,4 +15,8 @@ __all__ = [
     "JobStatus",
     "AnalysisResult",
     "RefreshToken",
+    "Role",
+    "PermissionRecord",
+    "RolePermission",
+    "AuditLog",
 ]

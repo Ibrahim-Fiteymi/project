@@ -15,6 +15,8 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DashboardLayout from "./layout/DashboardLayout";
 import { useAuth } from "./lib/AuthContext";
+import { ROLE_ADMIN, ROLE_SUPERADMIN } from "./lib/permissions";
+import Admin from "./pages/Admin";
 import AiChat from "./pages/AiChat";
 import AnalysisHistory from "./pages/AnalysisHistory";
 import AnalysisResult from "./pages/AnalysisResult";
@@ -82,6 +84,14 @@ export default function App() {
                     path="/settings"
                     element={
                       <Settings userEmail={user?.email ?? ""} health={health} />
+                    }
+                  />
+                  <Route
+                    path="/admin"
+                    element={
+                      <ProtectedRoute roles={[ROLE_ADMIN, ROLE_SUPERADMIN]}>
+                        <Admin />
+                      </ProtectedRoute>
                     }
                   />
                   <Route path="*" element={<NotFound />} />

@@ -19,7 +19,7 @@ def test_register_returns_token_pair(anon_client):
     assert body["access_token"]
     assert body["refresh_token"]
     assert body["token_type"] == "bearer"
-    assert body["user"]["role"] == "user"
+    assert body["user"]["role"] == "researcher"
     assert body["user"]["is_active"] is True
 
 
@@ -71,7 +71,7 @@ def test_me_requires_auth(anon_client):
 def test_me_returns_caller(client):
     res = client.get("/auth/me")
     assert res.status_code == 200
-    assert res.json()["role"] == "user"
+    assert res.json()["role"] == "researcher"
 
 
 def test_analysis_routes_require_auth(anon_client, upload_png):

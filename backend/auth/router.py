@@ -17,6 +17,7 @@ from sqlmodel import Session
 
 from backend.auth.dependencies import _client_meta, get_current_user
 from backend.auth.passwords import hash_password, verify_password
+from backend.auth.permissions import ROLE_RESEARCHER
 from backend.auth.schemas import (
     LoginRequest,
     LogoutRequest,
@@ -33,6 +34,7 @@ from backend.auth.tokens import (
 from backend.config import settings
 from backend.db import get_session, repositories_auth
 from backend.db.models import User
+from backend.services import audit_service
 
 log = logging.getLogger(__name__)
 
@@ -81,14 +83,31 @@ def register(
     session: Session = Depends(get_session),
 ) -> TokenResponse:
     if repositories_auth.get_user_by_email(session, payload.email) is not None:
+        audit_service.record(
+            session,
+            actor_user_id=None,
+            action="auth.register.duplicate",
+            target_type="user",
+            target_id=payload.email,
+            request=request,
+        )
         raise HTTPException(status_code=409, detail="Email is already registered")
     user = repositories_auth.create_user(
         session,
         email=payload.email,
         password_hash=hash_password(payload.password),
-        role="user",
+        role=ROLE_RESEARCHER,
     )
     repositories_auth.mark_login_success(session, user)
+    audit_service.record(
+        session,
+        actor_user_id=user.id,
+        action="auth.register",
+        target_type="user",
+        target_id=str(user.id),
+        request=request,
+        extra={"email": user.email, "role": user.role},
+    )
     return _issue_token_pair(session, user, request)
 
 
@@ -103,8 +122,25 @@ def login(
     if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
         if user is not None:
             repositories_auth.mark_login_failure(session, user)
+        audit_service.record(
+            session,
+            actor_user_id=user.id if user is not None else None,
+            action="auth.login.failure",
+            target_type="user",
+            target_id=payload.email,
+            request=request,
+            extra={"reason": "bad_credentials_or_inactive"},
+        )
         raise HTTPException(status_code=401, detail="Invalid email or password")
     repositories_auth.mark_login_success(session, user)
+    audit_service.record(
+        session,
+        actor_user_id=user.id,
+        action="auth.login",
+        target_type="user",
+        target_id=str(user.id),
+        request=request,
+    )
     return _issue_token_pair(session, user, request)
 
 
@@ -129,9 +165,11 @@ def refresh(
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
     payload: LogoutRequest,
+    request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> None:
+    revoked = 0
     if payload.refresh_token:
         rt = repositories_auth.find_active_refresh_token(
             session, hash_refresh_token(payload.refresh_token)
@@ -139,10 +177,20 @@ def logout(
         # Only revoke if the token actually belongs to the caller.
         if rt is not None and rt.user_id == user.id:
             repositories_auth.revoke_refresh_token(session, rt)
+            revoked = 1
     else:
         # Best-effort full sign-out: revoke all the caller's refresh tokens.
         if user.id is not None:
-            repositories_auth.revoke_all_user_tokens(session, user.id)
+            revoked = repositories_auth.revoke_all_user_tokens(session, user.id)
+    audit_service.record(
+        session,
+        actor_user_id=user.id,
+        action="auth.logout",
+        target_type="user",
+        target_id=str(user.id),
+        request=request,
+        extra={"revoked_count": revoked},
+    )
 
 
 @router.get("/me", response_model=UserResponse)

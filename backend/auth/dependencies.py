@@ -8,6 +8,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlmodel import Session
 
+from backend.auth.permissions import Permission, has_permission
 from backend.auth.tokens import TokenError, decode_access_token
 from backend.db import get_session
 from backend.db import repositories_auth
@@ -60,6 +61,25 @@ def require_role(*allowed: str):
     return _checker
 
 
+def require_permission(*required: Permission):
+    """Dependency factory: caller must hold ALL of the given permissions.
+
+    Permissions are derived from the role -> permission matrix in
+    :mod:`backend.auth.permissions`. The check is in-memory; no DB hit.
+    """
+
+    def _checker(user: User = Depends(get_current_user)) -> User:
+        for perm in required:
+            if not has_permission(user.role, perm):
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Missing permission: {perm.value}",
+                )
+        return user
+
+    return _checker
+
+
 def _client_meta(request) -> tuple[str | None, str | None]:
     ua = request.headers.get("user-agent")
     if ua:
@@ -68,7 +88,7 @@ def _client_meta(request) -> tuple[str | None, str | None]:
     return ua, ip
 
 
-__all__ = ["get_current_user", "require_role"]
+__all__ = ["get_current_user", "require_role", "require_permission"]
 
 
 def require_any(roles: Iterable[str]):
